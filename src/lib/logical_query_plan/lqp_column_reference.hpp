@@ -3,6 +3,7 @@
 #include <memory>
 
 #include "abstract_lqp_node.hpp"
+#include "expression/abstract_expression.hpp"
 #include "types.hpp"
 
 namespace opossum {
@@ -31,6 +32,9 @@ class LQPColumnReference final {
 
   // TODO doc that lineage is not added for every join, only if ambiguity exists - even for the same original_node / original_column_id pair, ambiguity does not exist if one side already has lineage information
   std::vector<std::pair<std::weak_ptr<const AbstractLQPNode>, LQPInputSide>> lineage{};
+
+  // Indirection through AbstractExpression will be gone with #1893
+  std::string description(AbstractExpression::DescriptionMode mode) const;
 
  private:
   // Needs to be weak since Nodes can hold ColumnReferences referring to themselves
