@@ -161,11 +161,14 @@ const std::vector<std::shared_ptr<AbstractExpression>>& JoinNode::join_predicate
 
 std::optional<ColumnID> JoinNode::find_column_id(const AbstractExpression& expression) const {  // TODO is this reeeeeally necessary?
   // std::cout << "JoinNode::find_column_id(" << expression << " on " << this << ")\n";
-  std::optional<ColumnID> column_id_on_left;
-  std::optional<ColumnID> column_id_on_right;
+  // std::optional<ColumnID> column_id_on_left;
+  // std::optional<ColumnID> column_id_on_right;
+
+  if (!disambiguate) return AbstractLQPNode::find_column_id(expression);
 
   // We might need to disambiguate the expression using the lineage information in the LQPColumnReferences.
   std::optional<LQPInputSide> disambiguated_input_side;
+  auto disambiguation_failed = false;
   auto disambiguated_expression = expression.deep_copy();
 
   visit_expression(disambiguated_expression, [&](auto& sub_expression) {
@@ -178,6 +181,7 @@ std::optional<ColumnID> JoinNode::find_column_id(const AbstractExpression& expre
 
       if (disambiguated_input_side && *disambiguated_input_side == last_lineage_step.second) {
         // failed resolving
+        disambiguation_failed = true;
         disambiguated_input_side = std::nullopt;
         return ExpressionVisitation::DoNotVisitArguments;
       }
@@ -192,48 +196,18 @@ std::optional<ColumnID> JoinNode::find_column_id(const AbstractExpression& expre
     }
     return ExpressionVisitation::VisitArguments;
   });
-  // std::cout << "\tdisambiguated as " << *disambiguated_expression << " on ";
-  // if (disambiguated_input_side) {
-  //   std::cout << (disambiguated_input_side == LQPInputSide::Left ? "left" : "right");
-  // } else {
-  //   std::cout << "unknown";
-  // }
-  // std::cout << " side" << std::endl;
 
-  const auto left_input_column_count = static_cast<ColumnID::base_type>(left_input()->column_expressions().size());
-  const auto& this_column_expressions = all_column_expressions();
-  for (auto column_id = ColumnID{0}; column_id < this_column_expressions.size(); ++column_id) {
-    // std::cout << "\tcandidate " << *this_column_expressions[column_id] << std::endl;
-
-    // TODO can we do the first part earlier?
-    if (*this_column_expressions[column_id] != expression &&
-        *this_column_expressions[column_id] != *disambiguated_expression) {
-      continue;
-    }
-    // std::cout << "\t\tmatch" << std::endl;
-
-    // Once a match is found, do not attempt to find more matches on that side. However, we need to check the other
-    // side as we need to rule out ambiguities.
-    if (column_id < left_input_column_count) {
-      column_id_on_left = column_id;
-      column_id = ColumnID{left_input_column_count};
-    } else {
-      column_id_on_right = column_id;
-      break;
-    }
+  if (!disambiguated_input_side || disambiguation_failed) {
+    return std::nullopt;
   }
 
-  if (column_id_on_left && (!column_id_on_right || disambiguated_input_side == LQPInputSide::Left)) {
-    // Found unambiguously on left side
-    return column_id_on_left;
-  }
+  auto column_id = input(*disambiguated_input_side)->find_column_id(*disambiguated_expression);
+  if (!column_id) return std::nullopt;
 
-  if (column_id_on_right && (!column_id_on_left || disambiguated_input_side == LQPInputSide::Right)) {
-    // Found unambiguously on right side
-    return column_id_on_right;
+  if (*disambiguated_input_side == LQPInputSide::Right) {
+    *column_id += left_input()->column_expressions().size();
   }
-
-  return std::nullopt;
+  return column_id;
 }
 
 //   // TODO pseudo-ambiguity could also come from literal columns on both sides. Test that those also work

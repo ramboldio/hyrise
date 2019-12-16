@@ -45,10 +45,6 @@ std::string LQPColumnReference::description(AbstractExpression::DescriptionMode 
   Assert(locked_original_node, "OriginalNode has expired");
 
   std::stringstream output;
-  if (mode == AbstractExpression::DescriptionMode::Detailed) {
-    output << locked_original_node << ".";
-  }
-
   if (_original_column_id == INVALID_COLUMN_ID) {
     output << "INVALID_COLUMN_ID";
     return output.str();

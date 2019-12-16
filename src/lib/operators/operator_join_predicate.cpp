@@ -1,6 +1,8 @@
 #include "operator_join_predicate.hpp"
 
 #include "expression/abstract_predicate_expression.hpp"
+#include "expression/expression_utils.hpp"
+#include "expression/lqp_column_expression.hpp"
 #include "logical_query_plan/abstract_lqp_node.hpp"
 #include "logical_query_plan/join_node.hpp"
 
@@ -31,6 +33,11 @@ std::optional<OperatorJoinPredicate> OperatorJoinPredicate::from_expression(cons
   const auto right_in_left = left_input.find_column_id(*abstract_predicate_expression->arguments[1]);
   const auto right_in_right = right_input.find_column_id(*abstract_predicate_expression->arguments[1]);
 
+  // std::cout << "left_in_left: " << (left_in_left ? *left_in_left : ColumnID{666}) << std::endl;
+  // std::cout << "left_in_right: " << (left_in_right ? *left_in_right : ColumnID{666}) << std::endl;
+  // std::cout << "right_in_left: " << (right_in_left ? *right_in_left : ColumnID{666}) << std::endl;
+  // std::cout << "right_in_right: " << (right_in_right ? *right_in_right : ColumnID{666}) << std::endl;
+
   auto predicate_condition = abstract_predicate_expression->predicate_condition;
 
   if (left_in_left && right_in_right) {
@@ -46,58 +53,95 @@ std::optional<OperatorJoinPredicate> OperatorJoinPredicate::from_expression(cons
 }
 
 std::optional<OperatorJoinPredicate> OperatorJoinPredicate::from_expression(const AbstractExpression& predicate,
-                                                                            const AbstractLQPNode& join_node) {
+                                                                            const AbstractLQPNode& node) {
+  // std::cout << "start OJP " << predicate << " on " << node << std::endl;
   const auto* abstract_predicate_expression = dynamic_cast<const AbstractPredicateExpression*>(&predicate);
   if (!abstract_predicate_expression) return std::nullopt;
 
-  switch (abstract_predicate_expression->predicate_condition) {
-    case PredicateCondition::Equals:
-    case PredicateCondition::NotEquals:
-    case PredicateCondition::LessThan:
-    case PredicateCondition::LessThanEquals:
-    case PredicateCondition::GreaterThan:
-    case PredicateCondition::GreaterThanEquals:
-      break;
-    default:
-      return std::nullopt;
+  DebugAssert(abstract_predicate_expression->arguments.size() == 2u, "Expected two arguments");
+  DebugAssert(node.type == LQPNodeType::Join, "Expected JoinNode");
+
+  const auto& join_node = static_cast<const JoinNode&>(node);
+  if (!join_node.disambiguate) {
+    // std::cout << "no disambiguation" << std::endl;
+    return from_expression(predicate, *join_node.left_input(), *join_node.right_input());
   }
 
-  Assert(abstract_predicate_expression->arguments.size() == 2u, "Expected two arguments");
+  // TODO dedup
+  const auto disambiguate_inplace = [](auto& expression, const auto& Xjoin_node) {
+    std::optional<LQPInputSide> disambiguated_input_side;
+    auto disambiguation_failed = false;
 
-  // Overwrite mode so that find_column_id is not left with only the left side
-  // TODO do this somehow differently
+    visit_expression(expression, [&](auto& sub_expression) {
+      if (disambiguation_failed) return ExpressionVisitation::DoNotVisitArguments;
 
-  auto& casted_join_node = const_cast<JoinNode&>(static_cast<const JoinNode&>(join_node));
-  const auto old_mode = casted_join_node.join_mode;
-  casted_join_node.join_mode = JoinMode::Inner;
-  auto left_arg_column_id = casted_join_node.find_column_id(*abstract_predicate_expression->arguments[0]); // TODO rename to first
-  auto right_arg_column_id = casted_join_node.find_column_id(*abstract_predicate_expression->arguments[1]);
-  casted_join_node.join_mode = old_mode;
+      if (const auto column_expression = dynamic_cast<LQPColumnExpression*>(&*sub_expression)) {
+        auto column_reference = column_expression->column_reference;
+        if (column_reference.lineage.empty()) return ExpressionVisitation::VisitArguments;
 
-  if (!left_arg_column_id || !right_arg_column_id) return std::nullopt;
+        const auto last_lineage_step = column_reference.lineage.back();
+        if (&*last_lineage_step.first.lock() != &Xjoin_node) return ExpressionVisitation::VisitArguments;
+
+        if (disambiguated_input_side && *disambiguated_input_side == last_lineage_step.second) {
+          // failed resolving
+          disambiguation_failed = true;
+          disambiguated_input_side = std::nullopt;
+          return ExpressionVisitation::DoNotVisitArguments;
+        }
+
+        disambiguated_input_side = last_lineage_step.second;
+
+        // Remove Xjoin_node from the lineage information of sub_expression
+        column_reference.lineage.pop_back();
+        sub_expression = std::make_shared<LQPColumnExpression>(column_reference);
+
+        // visit_expression ends here
+      }
+      return ExpressionVisitation::VisitArguments;
+    });
+
+    return disambiguated_input_side;
+  };
+
+  auto first_argument = abstract_predicate_expression->arguments[0]->deep_copy();
+  auto second_argument = abstract_predicate_expression->arguments[1]->deep_copy();
+
+  auto first_argument_side = disambiguate_inplace(first_argument, join_node);
+  auto second_argument_side = disambiguate_inplace(second_argument, join_node);
+
+  // if (first_argument_side) std::cout << "first_argument_side: " << (first_argument_side == LQPInputSide::Left ? "left" : "right") << std::endl; else std::cout << "first_argument_side unknown" << std::endl;
+  // if (first_argument_side) std::cout << "second_argument_side: " << (second_argument_side == LQPInputSide::Left ? "left" : "right") << std::endl; else std::cout << "second_argument_side unknown" << std::endl;
+
+  DebugAssert(first_argument_side && second_argument_side, "Join predicate is partially missing disambiguation information");
+  DebugAssert(*first_argument_side != *second_argument_side, "Join predicate was corrupted");
+
+  auto first_arg_column_id = join_node.input(*first_argument_side)->find_column_id(*first_argument);
+  auto second_arg_column_id = join_node.input(*second_argument_side)->find_column_id(*second_argument);
+
+  // std::cout << "from_expression " << *abstract_predicate_expression << std::endl;
+  // std::cout << "\tfirst" << (first_arg_column_id ? " " : " not ") << "found" << std::endl;
+  // std::cout << "\tsecond" << (second_arg_column_id ? " " : " not ") << "found" << std::endl;
+
+  if (!first_arg_column_id || !second_arg_column_id) return std::nullopt;
+
+  // const auto num_left_column_expressions =
+  //     static_cast<ColumnID::base_type>(join_node.left_input()->column_expressions().size());
+
+  // if (*first_argument_side == LQPInputSide::Right) *first_arg_column_id += num_left_column_expressions;
+  // if (*second_argument_side == LQPInputSide::Right) *second_arg_column_id += num_left_column_expressions;
 
   auto predicate_condition = abstract_predicate_expression->predicate_condition;
 
-
-  const auto num_left_column_expressions =
-      static_cast<ColumnID::base_type>(join_node.left_input()->column_expressions().size());
-
-  // std::cout << *abstract_predicate_expression << std::endl;
-  // std::cout << "\targ1 " << *abstract_predicate_expression->arguments[0] << std::endl;
-  // std::cout << "\targ2 " << *abstract_predicate_expression->arguments[1] << std::endl;
-
-  DebugAssert(*left_arg_column_id >= num_left_column_expressions ^ *right_arg_column_id >= num_left_column_expressions, "Join arguments are not unambiguously from left or right");
-
-  if (*left_arg_column_id < *right_arg_column_id) {
+  if (*first_argument_side == LQPInputSide::Left) {
     return OperatorJoinPredicate{
-        {*left_arg_column_id,
-         ColumnID{static_cast<ColumnID::base_type>(*right_arg_column_id - num_left_column_expressions)}},
+        {*first_arg_column_id,
+         *second_arg_column_id},
         predicate_condition};
   } else {
     predicate_condition = flip_predicate_condition(predicate_condition);
     return OperatorJoinPredicate{
-        {*right_arg_column_id,
-         ColumnID{static_cast<ColumnID::base_type>(*left_arg_column_id - num_left_column_expressions)}},
+        {*second_arg_column_id,
+         *first_arg_column_id},
         predicate_condition};
   }
 }
