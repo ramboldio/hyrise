@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 
+#include <termcolor/termcolor.hpp>
+
 #include "expression/abstract_expression.hpp"
 #include "expression/expression_functional.hpp"
 #include "expression/expression_utils.hpp"
@@ -20,6 +22,7 @@
 #include "logical_query_plan/update_node.hpp"
 
 using namespace opossum::expression_functional;  // NOLINT
+using namespace termcolor;
 
 namespace opossum {
 
@@ -145,8 +148,35 @@ ExpressionUnorderedSet gather_locally_required_expressions(
       for (const auto& predicate : join_node.join_predicates()) {
         DebugAssert(predicate->type == ExpressionType::Predicate && predicate->arguments.size() == 2,
                     "Expected binary predicate for join");
+
         locally_required_expressions.emplace(predicate->arguments[0]);
         locally_required_expressions.emplace(predicate->arguments[1]);
+
+        if (join_node.disambiguate) {
+          auto first_disambiguated_argument = predicate->arguments[0]->deep_copy();
+          auto second_disambiguated_argument = predicate->arguments[1]->deep_copy();
+
+          // TODO dedup
+          const auto remove_lineage = [&join_node](auto& argument) {
+            visit_expression(argument, [&join_node](auto& sub_expression) {
+              if (auto column_expression = std::dynamic_pointer_cast<LQPColumnExpression>(sub_expression)) {
+                std::cout << *column_expression << " - to - ";
+                auto new_column_reference = column_expression->column_reference;
+                DebugAssert(!new_column_reference.lineage.empty(), "Expected node to have lineage as we checked for JoinNode::disambiguate before");
+                DebugAssert(&*new_column_reference.lineage.back().first.lock() == &join_node, "Expected last lineage step to be current JoinNode");
+                new_column_reference.lineage.pop_back();
+                sub_expression = std::make_shared<LQPColumnExpression>(new_column_reference);
+                std::cout << *sub_expression << std::endl;
+              }
+              return ExpressionVisitation::VisitArguments;
+            });
+          };
+
+          remove_lineage(first_disambiguated_argument);
+          locally_required_expressions.emplace(first_disambiguated_argument);
+          remove_lineage(second_disambiguated_argument);
+          locally_required_expressions.emplace(second_disambiguated_argument);
+        }
       }
     } break;
 
@@ -182,20 +212,53 @@ void recursively_gather_required_expressions(
 
   // Once all nodes that may require columns from this node (i.e., this node's outputs) have been visited, we can
   // recurse into this node's inputs.
-  for (const auto& input : {node->left_input(), node->right_input()}) {
+  for (const auto& side : {LQPInputSide::Left, LQPInputSide::Right}) {
+    const auto input = node->input(side);
     if (!input) continue;
 
     // Make sure the entry in required_expressions_by_node exists, then insert all expressions that the current node
     // needs
     auto& required_expressions_for_input = required_expressions_by_node[input];
     for (const auto& required_expression : required_expressions) {
-      // Add the columns needed here (and above) if they come from the input node. Reasons why this might NOT be the
-      // case are: (1) The expression is calculated in this node (and is thus not available in the input node), or
-      // (2) we have two input nodes (i.e., a join) and the expressions comes from the other side.
-      if (input->find_column_id(*required_expression)) {
-        required_expressions_for_input.emplace(required_expression);
+
+      if (const auto join_node = std::dynamic_pointer_cast<JoinNode>(node); join_node && join_node->disambiguate) {
+        // TODO dedup
+        const auto remove_lineage = [&join_node, &side](auto& argument) {
+          visit_expression(argument, [&join_node, &side](auto& sub_expression) {
+            if (auto column_expression = std::dynamic_pointer_cast<LQPColumnExpression>(sub_expression)) {
+              if (column_expression->column_reference.lineage.empty()) return ExpressionVisitation::VisitArguments;
+              if (column_expression->column_reference.lineage.back().first.lock() != join_node) return ExpressionVisitation::VisitArguments;
+              std::cout << *column_expression << " - to - ";
+              auto new_column_reference = column_expression->column_reference;
+              if (new_column_reference.lineage.back().second != side) return ExpressionVisitation::VisitArguments;
+              new_column_reference.lineage.pop_back();
+              sub_expression = std::make_shared<LQPColumnExpression>(new_column_reference);
+              std::cout << *sub_expression << std::endl;
+            }
+            return ExpressionVisitation::VisitArguments;
+          });
+        };
+
+        auto disambiguated_required_expression = required_expression->deep_copy();
+        remove_lineage(disambiguated_required_expression);
+
+        if (input->find_column_id(*disambiguated_required_expression)) {
+          required_expressions_for_input.emplace(disambiguated_required_expression);
+        }
+
+        continue;
+      } else {
+        // Add the columns needed here (and above) if they come from the input node. Reasons why this might NOT be the
+        // case are: (1) The expression is calculated in this node (and is thus not available in the input node), or
+        // (2) we have two input nodes (i.e., a join) and the expressions comes from the other side.//
+        if (input->find_column_id(*required_expression)) {
+          required_expressions_for_input.emplace(required_expression);
+        }
       }
     }
+
+    std::cout << blue << *input << reset << std::endl;
+    for (const auto& re : required_expressions_for_input) std::cout << "\tREQUIRED: " << *re << std::endl;
 
     recursively_gather_required_expressions(input, required_expressions_by_node, outputs_visited_by_node);
   }
@@ -211,6 +274,7 @@ void try_join_to_semi_rewrite(
   // line more than once.
 
   auto join_node = std::dynamic_pointer_cast<JoinNode>(node);
+  std::cout << *join_node << std::endl;
   if (join_node->join_mode != JoinMode::Inner) return;
 
   // Check whether the left/right inputs are actually needed by following operators
@@ -218,6 +282,7 @@ void try_join_to_semi_rewrite(
   auto right_input_is_used = false;
   for (const auto& output : node->outputs()) {
     for (const auto& required_expression : required_expressions_by_node.at(output)) {
+      std::cout << "\trequired: " << *required_expression << std::endl;
       if (expression_evaluable_on_lqp(required_expression, *node->left_input())) left_input_is_used = true;
       if (expression_evaluable_on_lqp(required_expression, *node->right_input())) right_input_is_used = true;
     }

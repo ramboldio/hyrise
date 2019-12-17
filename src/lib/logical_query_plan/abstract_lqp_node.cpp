@@ -225,10 +225,10 @@ const std::vector<std::shared_ptr<AbstractExpression>>& AbstractLQPNode::column_
 }
 
 std::optional<ColumnID> AbstractLQPNode::find_column_id(const AbstractExpression& expression) const {
-  // std::cout << "AbstractLQPNode::find_column_id(" << expression << " on " << this << ")\n";
+  std::cout << "AbstractLQPNode::find_column_id(" << expression << " on " << this << ")\n";
   const auto& column_expressions = this->column_expressions();  // Avoid redundant retrieval in loop below
   for (auto column_id = ColumnID{0}; column_id < column_expressions.size(); ++column_id) {
-    // std::cout << "\tcandidate " << *column_expressions[column_id] << std::endl;
+    std::cout << "\tcandidate " << *column_expressions[column_id] << std::endl;
     if (*column_expressions[column_id] == expression) return column_id;
   }
   return std::nullopt;

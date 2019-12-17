@@ -160,7 +160,7 @@ bool JoinNode::is_column_nullable(const ColumnID column_id) const {
 const std::vector<std::shared_ptr<AbstractExpression>>& JoinNode::join_predicates() const { return node_expressions; }
 
 std::optional<ColumnID> JoinNode::find_column_id(const AbstractExpression& expression) const {  // TODO is this reeeeeally necessary?
-  // std::cout << "JoinNode::find_column_id(" << expression << " on " << this << ")\n";
+  std::cout << "JoinNode::find_column_id(" << expression << " on " << this << ")\n";
   // std::optional<ColumnID> column_id_on_left;
   // std::optional<ColumnID> column_id_on_right;
 

@@ -151,7 +151,7 @@ std::shared_ptr<Optimizer> Optimizer::create_default_optimizer() {
   // is more difficult. We do not expect any rule other than the ColumnPruningRule to mandatorily run after the
   // SubplanReuseRule - carefully consider if you really have to add yours below.
 
-  // optimizer->add_rule(std::make_unique<ColumnPruningRule>());  //TODO
+  optimizer->add_rule(std::make_unique<ColumnPruningRule>());
 
   return optimizer;
 }
@@ -186,8 +186,8 @@ std::shared_ptr<AbstractLQPNode> Optimizer::optimize(std::shared_ptr<AbstractLQP
   const auto optimized_node = root_node->left_input();
   root_node->set_left_input(nullptr);
 
-  // std::cout << "\n\n\n\n===Optimizer result===" << std::endl;
-  // std::cout << *optimized_node << std::endl;
+  std::cout << "\n\n\n\n===Optimizer result===" << std::endl;
+  std::cout << *optimized_node << std::endl;
 
   return optimized_node;
 }

@@ -82,7 +82,7 @@ std::optional<OperatorJoinPredicate> OperatorJoinPredicate::from_expression(cons
         const auto last_lineage_step = column_reference.lineage.back();
         if (&*last_lineage_step.first.lock() != &Xjoin_node) return ExpressionVisitation::VisitArguments;
 
-        if (disambiguated_input_side && *disambiguated_input_side == last_lineage_step.second) {
+        if (disambiguated_input_side && *disambiguated_input_side != last_lineage_step.second) {  // TODO test join predicate argument with two LQPColumnExpressions (e.g., TPC-H 15)
           // failed resolving
           disambiguation_failed = true;
           disambiguated_input_side = std::nullopt;

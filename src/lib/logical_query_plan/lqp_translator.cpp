@@ -550,8 +550,9 @@ std::shared_ptr<AbstractExpression> LQPTranslator::_translate_expression(
     }
 
     // std::cout << node << std::endl;
+    // TODO revert to short print
     AssertInput(expression->type != ExpressionType::LQPColumn,
-                "Failed to resolve Column '"s + expression->as_column_name() + "'' on " + node->description() + ", LQP is invalid");
+                "Failed to resolve Column '"s + expression->description() + "'' on " + node->description() + ", LQP is invalid");
 
     return ExpressionVisitation::VisitArguments;
   });
