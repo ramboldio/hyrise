@@ -90,10 +90,12 @@ std::shared_ptr<PosList> ColumnVsColumnTableScanImpl::scan_chunk(ChunkID chunk_i
     // `result` will still be nullptr if the SegmentTypes were not the same - if that's the case we have to take the
     // "slow" path further down to perform the scan
     if (result) {
+      std::cout << "1result has " << result->size() << " elements. Returning ..." << std::endl;
       return result;
     }
   }
 
+  std::cout << "slow path" << std::endl;
   /**
    * SLOW PATH
    * ...in which the left and right segment iterables are erased into AnySegmentIterables<T>

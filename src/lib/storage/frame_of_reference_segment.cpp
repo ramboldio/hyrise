@@ -1,3 +1,5 @@
+#include <limits.h>
+
 #include "frame_of_reference_segment.hpp"
 
 #include "resolve_type.hpp"
@@ -8,13 +10,22 @@
 namespace opossum {
 
 template <typename T, typename U>
-FrameOfReferenceSegment<T, U>::FrameOfReferenceSegment(pmr_vector<T> block_minima, pmr_vector<bool> null_values,
+FrameOfReferenceSegment<T, U>::FrameOfReferenceSegment(pmr_vector<T>&& block_minima, std::optional<pmr_vector<bool>>&& null_values,
                                                        std::unique_ptr<const BaseCompressedVector> offset_values)
     : BaseEncodedSegment{data_type_from_type<T>()},
       _block_minima{std::move(block_minima)},
       _null_values{std::move(null_values)},
       _offset_values{std::move(offset_values)},
-      _decompressor{_offset_values->create_base_decompressor()} {}
+      _decompressor{_offset_values->create_base_decompressor()} {
+        // std::cout << "Constructor: " << std::boolalpha << " NULLs? " << static_cast<bool>(_null_values) << std::endl;
+        // if (_null_values) {
+        //   std::cout << "null vector size is " << _null_values->size() << " and offset size is " << _offset_values->size() << std::endl;
+        //   for (const auto el : *_null_values) {
+        //     std::cout << std::boolalpha << el;
+        //   }
+        //   std::cout << std::endl;
+        // }
+      }
 
 template <typename T, typename U>
 const pmr_vector<T>& FrameOfReferenceSegment<T, U>::block_minima() const {
@@ -22,7 +33,7 @@ const pmr_vector<T>& FrameOfReferenceSegment<T, U>::block_minima() const {
 }
 
 template <typename T, typename U>
-const pmr_vector<bool>& FrameOfReferenceSegment<T, U>::null_values() const {
+const std::optional<pmr_vector<bool>>& FrameOfReferenceSegment<T, U>::null_values() const {
   return _null_values;
 }
 
@@ -52,8 +63,11 @@ template <typename T, typename U>
 std::shared_ptr<BaseSegment> FrameOfReferenceSegment<T, U>::copy_using_allocator(
     const PolymorphicAllocator<size_t>& alloc) const {
   auto new_block_minima = pmr_vector<T>{_block_minima, alloc};
-  auto new_null_values = pmr_vector<bool>{_null_values, alloc};
   auto new_offset_values = _offset_values->copy_using_allocator(alloc);
+  std::optional<pmr_vector<bool>> new_null_values;
+  if (_null_values) {
+    new_null_values = pmr_vector<bool>{*_null_values, alloc};
+  }
 
   return std::allocate_shared<FrameOfReferenceSegment>(alloc, std::move(new_block_minima), std::move(new_null_values),
                                                        std::move(new_offset_values));
@@ -61,10 +75,9 @@ std::shared_ptr<BaseSegment> FrameOfReferenceSegment<T, U>::copy_using_allocator
 
 template <typename T, typename U>
 size_t FrameOfReferenceSegment<T, U>::estimate_memory_usage() const {
-  static const auto bits_per_byte = 8u;
+  const auto null_values_size = _null_values ? static_cast<size_t>(std::ceil(_null_values->size() / CHAR_BIT)) : 0ul;
 
-  return sizeof(*this) + sizeof(T) * _block_minima.size() + _offset_values->data_size() +
-         _null_values.size() / bits_per_byte;
+  return sizeof(*this) + sizeof(T) * _block_minima.size() + _offset_values->data_size() + null_values_size;
 }
 
 template <typename T, typename U>

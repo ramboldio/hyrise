@@ -19,6 +19,7 @@ std::unique_ptr<AbstractSegmentAccessor<T>> CreateSegmentAccessor<T>::create(
         // Note that this is independent of the row being pointed to holding a NULL value.
         if (pos_list[ChunkOffset{0}].is_null()) {
           accessor = std::make_unique<NullAccessor<T>>();
+          std::cout << "Using a NULL Accessor" << std::endl;
         } else {
           auto chunk_id = pos_list[ChunkOffset{0}].chunk_id;
           auto referenced_segment =

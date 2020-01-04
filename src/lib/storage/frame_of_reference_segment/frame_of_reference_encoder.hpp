@@ -37,6 +37,7 @@ class FrameOfReferenceEncoder : public SegmentEncoder<FrameOfReferenceEncoder> {
 
     // holds whether a segment value is null
     auto null_values = pmr_vector<bool>{allocator};
+    auto segment_contains_null_values = false;
 
     // used as optional input for the compression of the offset values
     auto max_offset = uint32_t{0u};
@@ -74,6 +75,7 @@ class FrameOfReferenceEncoder : public SegmentEncoder<FrameOfReferenceEncoder> {
             min_value = std::min(min_value, value);
             max_value = std::max(max_value, value);
           }
+          segment_contains_null_values |= value_is_null;
           block_contains_values |= !value_is_null;
         }
 
@@ -106,6 +108,34 @@ class FrameOfReferenceEncoder : public SegmentEncoder<FrameOfReferenceEncoder> {
 
     auto compressed_offset_values = compress_vector(offset_values, vector_compression_type(), allocator, {max_offset});
 
+    // std::cout << std::boolalpha << "NULLs found? " << segment_contains_null_values << " | offset size " << compressed_offset_values->size() << " | minima size " << block_minima.size();
+    // if (segment_contains_null_values) 
+    //   std::cout << " | size of null vector" << null_values.size();
+    // std::cout << std::endl;
+
+    // auto null_values_optional = segment_contains_null_values ? std::optional<pmr_vector<bool>>{null_values} : std::nullopt;
+    // std::optional<pmr_vector<bool>> null_values_optional;
+    // if (segment_contains_null_values) {
+      // std::cout << "null active " << std::endl;
+      // for (const auto el : null_values) {
+      //   std::cout << std::boolalpha << el;
+      // }
+      // std::cout << std::endl;
+    //   null_values_optional = std::move(null_values);
+    // }
+
+    // if (segment_contains_null_values) {
+    //   std::cout << "second try on optional " << "size is " << null_values_optional->size() <<std::endl;
+    //   for (const auto el : *null_values_optional) {
+    //     std::cout << std::boolalpha << el;
+    //   }
+    //   std::cout << std::endl;
+    // }
+
+    // return std::allocate_shared<FrameOfReferenceSegment<T>>(allocator, std::move(block_minima), std::move(null_values_optional),
+    //                                                         std::move(compressed_offset_values));
+    // return std::allocate_shared<FrameOfReferenceSegment<T>>(allocator, std::move(block_minima), std::nullopt,
+    //                                                         std::move(compressed_offset_values));
     return std::allocate_shared<FrameOfReferenceSegment<T>>(allocator, std::move(block_minima), std::move(null_values),
                                                             std::move(compressed_offset_values));
   }

@@ -371,6 +371,18 @@ void BenchmarkRunner::_create_report(std::ostream& stream) const {
   // Gather information on the (estimated) table size
   auto table_size = size_t{0};
   for (const auto& table_pair : Hyrise::get().storage_manager.tables()) {
+    const auto& table = table_pair.second;
+    const auto chunk_count = table->chunk_count();
+    for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
+      const auto& chunk = table->get_chunk(chunk_id);
+      for (auto column_id = ColumnID{0}; static_cast<ColumnID>(column_id) < chunk->column_count(); ++column_id) {
+        const auto& segment = chunk->get_segment(column_id);
+        const auto encoded_segment = std::dynamic_pointer_cast<const BaseEncodedSegment>(segment);
+        if (encoded_segment && encoded_segment->encoding_type() == EncodingType::FrameOfReference) {
+          std::cout << table_pair.first << "," << column_id << "," << chunk_id << "," << segment->estimate_memory_usage() << std::endl;
+        }
+      }
+    }
     table_size += table_pair.second->estimate_memory_usage();
   }
 
