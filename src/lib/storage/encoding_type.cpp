@@ -27,12 +27,4 @@ bool encoding_supports_data_type(EncodingType encoding_type, DataType data_type)
   return result;
 }
 
-std::ostream& operator<<(std::ostream& stream, const SegmentEncodingSpec& spec) {
-  stream << spec.encoding_type;
-  if (spec.vector_compression_type) {
-    stream << " (" << *spec.vector_compression_type << ")";
-  }
-  return stream;
-}
-
 }  // namespace opossum
