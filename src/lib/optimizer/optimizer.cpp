@@ -114,13 +114,6 @@ std::shared_ptr<Optimizer> Optimizer::create_default_optimizer() {
 
   optimizer->add_rule(std::make_unique<PredicatePlacementRule>());
 
-  // Prune chunks after the BetweenCompositionRule ran, as `a >= 5 AND a <= 7` may not be prunable predicates while `a
-  // BETWEEN 5 and 7` is. Also, make sure the PredicatePlacementRule ran at least once, so that predicates are as close
-  // to the StoredTableNode as possible where the ChunkPruningRule can work with them. On the other hand, run it before
-  // the PredicateSplitUp WITH disjunction split up and before the SemiJoinReductionRule as it does not particularly
-  // like diamonds.
-  optimizer->add_rule(std::make_unique<ChunkPruningRule>());
-
   optimizer->add_rule(std::make_unique<PredicateSplitUpRule>());
 
   optimizer->add_rule(std::make_unique<SubqueryToJoinRule>());
@@ -265,6 +258,7 @@ void Optimizer::validate_lqp(const std::shared_ptr<AbstractLQPNode>& root_node) 
         case LQPNodeType::Alias:
         case LQPNodeType::CreateTable:
         case LQPNodeType::Delete:
+        case LQPNodeType::Export:
         case LQPNodeType::Insert:
         case LQPNodeType::Limit:
         case LQPNodeType::Predicate:

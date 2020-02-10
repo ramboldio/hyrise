@@ -1,7 +1,6 @@
 #pragma once
 
 #include <vector>
-#include "types.hpp"
 #include "utils/assert.hpp"
 
 namespace opossum {
@@ -21,7 +20,7 @@ class ExpressionResultNullableSeries {
  public:
   using Type = T;
 
-  ExpressionResultNullableSeries(const pmr_vector<T>& values, const pmr_vector<bool>& nulls)
+  ExpressionResultNullableSeries(const std::vector<T>& values, const std::vector<bool>& nulls)
       : _values(values), _nulls(nulls) {
     DebugAssert(values.size() == nulls.size(), "Need as many values as nulls");
   }
@@ -43,8 +42,8 @@ class ExpressionResultNullableSeries {
   }
 
  private:
-  const pmr_vector<T>& _values;
-  const pmr_vector<bool>& _nulls;
+  const std::vector<T>& _values;
+  const std::vector<bool>& _nulls;
 };
 
 /**
@@ -56,7 +55,7 @@ class ExpressionResultNonNullSeries {
  public:
   using Type = T;
 
-  explicit ExpressionResultNonNullSeries(const pmr_vector<T>& values) : _values(values) {}
+  explicit ExpressionResultNonNullSeries(const std::vector<T>& values) : _values(values) {}
 
   bool is_series() const { return true; }
   bool is_literal() const { return false; }
@@ -72,7 +71,7 @@ class ExpressionResultNonNullSeries {
   bool is_null(const size_t idx) const { return false; }
 
  private:
-  const pmr_vector<T>& _values;
+  const std::vector<T>& _values;
 };
 
 /**

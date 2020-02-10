@@ -20,7 +20,8 @@ template <typename T>
 class DictionarySegment : public BaseDictionarySegment {
  public:
   explicit DictionarySegment(const std::shared_ptr<const pmr_vector<T>>& dictionary,
-                             const std::shared_ptr<const BaseCompressedVector>& attribute_vector);
+                             const std::shared_ptr<const BaseCompressedVector>& attribute_vector,
+                             const ValueID null_value_id);
 
   // returns an underlying dictionary
   std::shared_ptr<const pmr_vector<T>> dictionary() const;
@@ -35,7 +36,7 @@ class DictionarySegment : public BaseDictionarySegment {
   std::optional<T> get_typed_value(const ChunkOffset chunk_offset) const {
     // performance critical - not in cpp to help with inlining
     const auto value_id = _decompressor->get(chunk_offset);
-    if (value_id == _dictionary->size()) {
+    if (value_id == _null_value_id) {
       return std::nullopt;
     }
     return (*_dictionary)[value_id];
@@ -87,6 +88,7 @@ class DictionarySegment : public BaseDictionarySegment {
  protected:
   const std::shared_ptr<const pmr_vector<T>> _dictionary;
   const std::shared_ptr<const BaseCompressedVector> _attribute_vector;
+  const ValueID _null_value_id;
   std::unique_ptr<BaseVectorDecompressor> _decompressor;
 };
 

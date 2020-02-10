@@ -144,7 +144,8 @@ std::shared_ptr<const Table> Projection::_on_execute() {
                     const auto& dictionary = typed_segment.dictionary();
 
                     output_segments[column_id] = std::make_shared<DictionarySegment<ColumnDataType>>(
-                        dictionary, std::move(compressed_attribute_vector));
+                        dictionary, std::move(compressed_attribute_vector),
+                        referenced_dictionary_segment->null_value_id());
                   } else if constexpr (std::is_same_v<DictionarySegmentType,  // NOLINT - lint.sh wants {} on same line
                                                       FixedStringDictionarySegment<ColumnDataType>>) {
                     const auto compressed_attribute_vector =
@@ -152,7 +153,8 @@ std::shared_ptr<const Table> Projection::_on_execute() {
                     const auto& dictionary = typed_segment.fixed_string_dictionary();
 
                     output_segments[column_id] = std::make_shared<FixedStringDictionarySegment<ColumnDataType>>(
-                        dictionary, std::move(compressed_attribute_vector));
+                        dictionary, std::move(compressed_attribute_vector),
+                        referenced_dictionary_segment->null_value_id());
                   } else {
                     Fail("Referenced segment was dynamically casted to BaseDictionarySegment, but resolve failed");
                   }
@@ -162,8 +164,8 @@ std::shared_ptr<const Table> Projection::_on_execute() {
             // End of dictionary segment shortcut - handle all other referenced segments and ReferenceSegments that
             // reference more than a single chunk by materializing themm into a ValueSegment
             bool has_null = false;
-            auto values = pmr_vector<ColumnDataType>(segment->size());
-            auto null_values = pmr_vector<bool>(
+            auto values = pmr_concurrent_vector<ColumnDataType>(segment->size());
+            auto null_values = pmr_concurrent_vector<bool>(
                 input_table.column_is_nullable(pqp_column_expression->column_id) ? segment->size() : 0);
 
             auto chunk_offset = ChunkOffset{0};

@@ -74,7 +74,7 @@ std::shared_ptr<Table> load_table(const std::string& file_name, size_t chunk_siz
 
     table->append(variant_values);
 
-    auto mvcc_data = table->last_chunk()->mvcc_data();
+    auto mvcc_data = table->last_chunk()->get_scoped_mvcc_data_lock();
     mvcc_data->begin_cids.back() = 0;
   }
 

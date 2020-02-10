@@ -114,8 +114,7 @@ template <typename ColumnDataType, typename AggregateType>
 struct AggregateResultContext : SegmentVisitorContext {
   using AggregateResultAllocator = PolymorphicAllocator<AggregateResults<ColumnDataType, AggregateType>>;
 
-  AggregateResultContext() : results(AggregateResultAllocator{&buffer}) {
-  }
+  AggregateResultContext() : results(AggregateResultAllocator{&buffer}) {}
 
   boost::container::pmr::monotonic_buffer_resource buffer;
   AggregateResults<ColumnDataType, AggregateType> results;
@@ -271,11 +270,9 @@ void AggregateHash::_aggregate() {
     jobs.reserve(_groupby_column_ids.size());
 
     for (size_t group_column_index = 0; group_column_index < _groupby_column_ids.size(); ++group_column_index) {
-      jobs.emplace_back(std::make_shared<JobTask>([&input_table, group_column_index, &keys_per_chunk, &most_distinct_values, this]() {
+      jobs.emplace_back(std::make_shared<JobTask>([&input_table, group_column_index, &keys_per_chunk, &most_distinct_values, chunk_count, this]() {
         const auto groupby_column_id = _groupby_column_ids.at(group_column_index);
         const auto data_type = input_table->column_data_type(groupby_column_id);
-
-        const auto chunk_count = input_table->chunk_count();
 
         resolve_data_type(data_type, [&](auto type) {
           using ColumnDataType = typename decltype(type)::type;
@@ -357,7 +354,7 @@ void AggregateHash::_aggregate() {
 
                 ++chunk_offset;
               });
-              most_distinct_values = std::max(most_distinct_values, id_counter);
+              most_distinct_values = std::max(size_t{most_distinct_values}, size_t{id_counter});
             }
           }
         });
@@ -748,8 +745,8 @@ void AggregateHash::_write_groupby_output(PosList& pos_list) {
     resolve_data_type(input_table->column_data_type(column_id), [&](const auto typed_value) {
       using ColumnDataType = typename decltype(typed_value)::type;
 
-      auto values = pmr_vector<ColumnDataType>(pos_list.size());
-      auto null_values = pmr_vector<bool>(pos_list.size());
+      auto values = pmr_concurrent_vector<ColumnDataType>(pos_list.size());
+      auto null_values = pmr_concurrent_vector<bool>(pos_list.size());
       std::vector<std::unique_ptr<AbstractSegmentAccessor<ColumnDataType>>> accessors(input_table->chunk_count());
 
       auto output_offset = ChunkOffset{0};

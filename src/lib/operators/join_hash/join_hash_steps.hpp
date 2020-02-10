@@ -4,8 +4,14 @@
 #include <boost/lexical_cast.hpp>
 #include <uninitialized_vector.hpp>
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcomma"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wold-style-cast"
+#pragma clang diagnostic ignored "-Wreserved-id-macro"
 #include "../../../../third_party/parallel-hashmap/parallel_hashmap/phmap.h"
 #include "../../../../third_party/robin-hood-hashing/src/include/robin_hood.h"
+#pragma clang diagnostic pop
 #include "hyrise.hpp"
 #include "operators/multi_predicate_join/multi_predicate_join_evaluator.hpp"
 #include "resolve_type.hpp"

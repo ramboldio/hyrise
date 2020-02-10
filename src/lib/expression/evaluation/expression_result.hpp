@@ -62,7 +62,7 @@ class ExpressionResult : public BaseExpressionResult {
 
   ExpressionResult() = default;
 
-  explicit ExpressionResult(pmr_vector<T> values, pmr_vector<bool> nulls = {})
+  explicit ExpressionResult(std::vector<T> values, std::vector<bool> nulls = {})
       : values(std::move(values)), nulls(std::move(nulls)) {
     // Allowed size of nulls: 0 (not nullable)
     //                        1 (nullable, all values are NULL or NOT NULL, depending on the value)
@@ -112,8 +112,8 @@ class ExpressionResult : public BaseExpressionResult {
 
   size_t size() const { return values.size(); }
 
-  pmr_vector<T> values;
-  pmr_vector<bool> nulls;
+  std::vector<T> values;
+  std::vector<bool> nulls;
 };
 
 }  // namespace opossum

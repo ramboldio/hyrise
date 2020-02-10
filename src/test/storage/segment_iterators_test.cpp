@@ -197,8 +197,6 @@ bool operator<(const AbstractSegmentPosition<T>&, const AbstractSegmentPosition<
 }
 
 INSTANTIATE_TEST_SUITE_P(SegmentIteratorsTestInstances, SegmentIteratorsTest,
-                         ::testing::ValuesIn(all_segment_encoding_specs), all_segment_encoding_specs_formatter);
+                         ::testing::ValuesIn(all_segment_encoding_specs));
 
 }  // namespace opossum
-
-// TODO test new dictionary features

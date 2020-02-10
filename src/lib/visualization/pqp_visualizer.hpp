@@ -1,6 +1,5 @@
 #pragma once
 
-#include <map>
 #include <memory>
 #include <string>
 #include <utility>
@@ -32,8 +31,6 @@ class PQPVisualizer : public AbstractVisualizer<std::vector<std::shared_ptr<Abst
                        const std::shared_ptr<const AbstractOperator>& to, const InputSide side);
 
   void _add_operator(const std::shared_ptr<const AbstractOperator>& op);
-
-  std::map<std::string, std::chrono::nanoseconds> duration_by_operator_name;
 };
 
 }  // namespace opossum

@@ -125,6 +125,8 @@ set(
     logical_query_plan/dummy_table_node.cpp
     logical_query_plan/dummy_table_node.hpp
     logical_query_plan/enable_make_for_lqp_node.hpp
+    logical_query_plan/export_node.cpp
+    logical_query_plan/export_node.hpp
     logical_query_plan/import_node.cpp
     logical_query_plan/import_node.hpp
     logical_query_plan/insert_node.cpp
@@ -569,6 +571,7 @@ set(
     utils/plugin_manager.cpp
     utils/plugin_manager.hpp
     utils/print_directed_acyclic_graph.hpp
+    utils/scoped_locking_ptr.hpp
     utils/singleton.hpp
     utils/sqlite_add_indices.cpp
     utils/sqlite_add_indices.hpp

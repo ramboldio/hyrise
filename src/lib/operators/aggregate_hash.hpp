@@ -18,8 +18,14 @@
 #include "abstract_read_only_operator.hpp"
 #include "bytell_hash_map.hpp"
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wcomma"
+#pragma clang diagnostic ignored "-Wmissing-noreturn"
+#pragma clang diagnostic ignored "-Wold-style-cast"
+#pragma clang diagnostic ignored "-Wreserved-id-macro"
 #include "../../../../third_party/parallel-hashmap/parallel_hashmap/phmap.h"
 #include "../../../../third_party/robin-hood-hashing/src/include/robin_hood.h"
+#pragma clang diagnostic pop
 
 #include "expression/aggregate_expression.hpp"
 #include "resolve_type.hpp"
