@@ -174,6 +174,14 @@ add_library(uninitialized_vector INTERFACE)
 target_include_directories(uninitialized_vector INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/uninitialized_vector/)
 target_sources(uninitialized_vector INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/uninitialized_vector/uninitialized_vector.hpp)
 
+add_library(parallel_hashmap INTERFACE)
+target_include_directories(parallel_hashmap SYSTEM INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/parallel_hashmap/)
+target_sources(parallel_hashmap INTERFACE
+    ${CMAKE_CURRENT_SOURCE_DIR}/parallel_hashmap/parallel_hashmap/btree.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/parallel_hashmap/parallel_hashmap/meminfo.h
+    ${CMAKE_CURRENT_SOURCE_DIR}/parallel_hashmap/parallel_hashmap/phmap.h
+)
+
 if (APPLE)
     set(JEMALLOC_LIB_PATH ${CMAKE_CURRENT_BINARY_DIR}/jemalloc/lib/libjemalloc.dylib)
 else()

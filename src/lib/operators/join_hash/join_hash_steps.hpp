@@ -4,9 +4,9 @@
 #include <boost/lexical_cast.hpp>
 #include <uninitialized_vector.hpp>
 
-#include "bytell_hash_map.hpp"
 #include "hyrise.hpp"
 #include "operators/multi_predicate_join/multi_predicate_join_evaluator.hpp"
+#include "parallel_hashmap/phmap.h"
 #include "resolve_type.hpp"
 #include "scheduler/abstract_task.hpp"
 #include "scheduler/job_task.hpp"
@@ -50,6 +50,7 @@ using Partition = std::conditional_t<std::is_trivially_destructible_v<T>, uninit
 // cache.
 template <typename HashedType>
 class PosHashTable {
+  // TODO
   // In case we consider runtime to be more relevant, the flat hash map performs better (measured to be mostly on par
   // with bytell hash map and in some cases up to 5% faster) but is significantly larger than the bytell hash map.
   //
@@ -57,7 +58,7 @@ class PosHashTable {
   // of the offset does not limit the number of rows in the partition but the number of distinct values. If we end up
   // with a partition that has more values, the partitioning algorithm is at fault.
   using Offset = uint32_t;
-  using HashTable = ska::bytell_hash_map<HashedType, Offset>;
+  using HashTable = phmap::flat_hash_map<HashedType, Offset>;
 
   // The small_vector holds the first n values in local storage and only resorts to heap storage after that. 1 is chosen
   // as n because in many cases, we join on primary key attributes where by definition we have only one match on the
@@ -105,8 +106,6 @@ class PosHashTable {
         _values->emplace_back(std::pair<HashedType, Offset>{value, offset});
       }
       _hash_table.clear();
-    } else {
-      _hash_table.shrink_to_fit();
     }
   }
 

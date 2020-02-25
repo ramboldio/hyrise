@@ -597,6 +597,7 @@ set(
 
 set(
     LIBRARIES
+    parallel_hashmap
     sqlparser
     cqf
     uninitialized_vector
