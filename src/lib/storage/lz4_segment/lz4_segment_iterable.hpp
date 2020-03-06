@@ -147,8 +147,6 @@ class LZ4SegmentIterable : public PointAccessibleSegmentIterable<LZ4SegmentItera
    private:
     const std::vector<T>* _data;
     const std::optional<pmr_vector<bool>>* _null_values;
-
-    ChunkOffset _chunk_offset;
   };
 };
 
