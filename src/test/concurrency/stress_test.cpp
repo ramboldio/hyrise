@@ -173,7 +173,7 @@ TEST_F(StressTest, Encoding) {
 
   auto query_runner = [&]() {
     while (!stop) {
-      std::cout << ".";
+      // std::cout << ".";
       auto pipeline =
           SQLPipelineBuilder{std::string{"SELECT SUM(t1.a) FROM table_a AS t1, table_a AS t2 WHERE t1.a = t2.a"}}
               .create_pipeline();
@@ -194,7 +194,7 @@ TEST_F(StressTest, Encoding) {
   auto encoding_runner = [&]() {
     while (!stop) {
       for (const auto& encoding : chunk_encoding_specs) {
-        std::cout << "+";
+        // std::cout << "+";
         ChunkEncoder::encode_all_chunks(table_a, encoding);
         for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
           assert_chunk_encoding(table_a->get_chunk(chunk_id), encoding);
@@ -209,7 +209,7 @@ TEST_F(StressTest, Encoding) {
   std::thread query_thread_4([&] { query_runner(); });
   std::thread encoding_thread([&] { encoding_runner(); });
 
-  std::this_thread::sleep_for(std::chrono::seconds(90));
+  std::this_thread::sleep_for(std::chrono::seconds(600));
   stop = true;
   query_thread_1.join();
   query_thread_2.join();
