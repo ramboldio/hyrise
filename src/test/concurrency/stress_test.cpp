@@ -156,4 +156,69 @@ TEST_F(StressTest, TestTransactionInserts) {
   EXPECT_EQ(conflicted_increments, 0);
 }
 
+TEST_F(StressTest, Encoding) {
+  TableColumnDefinitions column_definitions;
+  column_definitions.emplace_back("a", DataType::Int, false);
+  column_definitions.emplace_back("b", DataType::String, false);
+
+  auto table_a = std::make_shared<Table>(column_definitions, TableType::Data, 5'000, UseMvcc::Yes);
+  for (auto row_id = int32_t{0}; row_id < 51'000; ++row_id) {
+    table_a->append({row_id, pmr_string{std::to_string(row_id)}});
+  }
+  const auto chunk_count = table_a->chunk_count();
+  table_a->get_chunk(ChunkID{chunk_count - 1})->finalize();
+  Hyrise::get().storage_manager.add_table("table_a", table_a);
+
+  auto stop = false;
+
+  auto query_runner = [&]() {
+    while (!stop) {
+      std::cout << ".";
+      auto pipeline =
+          SQLPipelineBuilder{std::string{"SELECT SUM(t1.a) FROM table_a AS t1, table_a AS t2 WHERE t1.a = t2.a"}}
+              .create_pipeline();
+      const auto [_, table] = pipeline.get_result_table();
+      ASSERT_EQ(1ul, table->row_count());
+    }
+  };
+
+  const auto chunk_encoding_specs = {
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::LZ4},
+                        SegmentEncodingSpec{EncodingType::FixedStringDictionary}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary}, SegmentEncodingSpec{EncodingType::Unencoded}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded}, SegmentEncodingSpec{EncodingType::Dictionary}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::RunLength}, SegmentEncodingSpec{EncodingType::LZ4}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference},
+                        SegmentEncodingSpec{EncodingType::RunLength}}};
+
+  auto encoding_runner = [&]() {
+    while (!stop) {
+      for (const auto& encoding : chunk_encoding_specs) {
+        std::cout << "+";
+        ChunkEncoder::encode_all_chunks(table_a, encoding);
+        for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
+          assert_chunk_encoding(table_a->get_chunk(chunk_id), encoding);
+        }
+      }
+    }
+  };
+
+  std::thread query_thread_1([&] { query_runner(); });
+  std::thread query_thread_2([&] { query_runner(); });
+  std::thread query_thread_3([&] { query_runner(); });
+  std::thread query_thread_4([&] { query_runner(); });
+  std::thread encoding_thread([&] { encoding_runner(); });
+
+  std::this_thread::sleep_for(std::chrono::seconds(90));
+  stop = true;
+  query_thread_1.join();
+  query_thread_2.join();
+  query_thread_3.join();
+  query_thread_4.join();
+  encoding_thread.join();
+
+  // One last check
+  query_runner();
+}
+
 }  // namespace opossum
