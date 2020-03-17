@@ -173,12 +173,20 @@ TEST_F(StressTest, Encoding) {
 
   auto query_runner = [&]() {
     while (!stop) {
-      // std::cout << ".";
-      auto pipeline =
-          SQLPipelineBuilder{std::string{"SELECT SUM(t1.a) FROM table_a AS t1, table_a AS t2 WHERE t1.a = t2.a"}}
-              .create_pipeline();
-      const auto [_, table] = pipeline.get_result_table();
-      ASSERT_EQ(1ul, table->row_count());
+      {
+        auto pipeline =
+            SQLPipelineBuilder{std::string{"SELECT SUM(a) FROM table_a WHERE a < 17"}}
+                .create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        ASSERT_EQ(1ul, table->row_count());
+      }
+      {
+        auto pipeline =
+            SQLPipelineBuilder{std::string{"SELECT t1.a as t1a FROM table_a AS t1 JOIN table_a AS t2 ON t1.a = t2.a WHERE t1a < 17"}}
+                .create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        ASSERT_EQ(17ul, table->row_count());
+      }
     }
   };
 
