@@ -161,8 +161,8 @@ TEST_F(StressTest, Encoding) {
   column_definitions.emplace_back("a", DataType::Int, false);
   column_definitions.emplace_back("b", DataType::String, false);
 
-  auto table_a = std::make_shared<Table>(column_definitions, TableType::Data, 5'000, UseMvcc::Yes);
-  for (auto row_id = int32_t{0}; row_id < 51'000; ++row_id) {
+  auto table_a = std::make_shared<Table>(column_definitions, TableType::Data, std::nullopt, UseMvcc::Yes);
+  for (auto row_id = int32_t{0}; row_id < 2'000'017; ++row_id) {
     table_a->append({row_id, pmr_string{std::to_string(row_id)}});
   }
   const auto chunk_count = table_a->chunk_count();
@@ -175,17 +175,19 @@ TEST_F(StressTest, Encoding) {
     while (!stop) {
       {
         auto pipeline =
-            SQLPipelineBuilder{std::string{"SELECT SUM(a) FROM table_a WHERE a < 17"}}
+            SQLPipelineBuilder{std::string{"SELECT SUM(a), MIN(b) FROM table_a WHERE a < 17"}}
                 .create_pipeline();
         const auto [_, table] = pipeline.get_result_table();
-        ASSERT_EQ(1ul, table->row_count());
+        ASSERT_EQ(136, table->get_value<int64_t>(ColumnID{0}, 0));
+        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
       }
       {
         auto pipeline =
-            SQLPipelineBuilder{std::string{"SELECT t1.a as t1a FROM table_a AS t1 JOIN table_a AS t2 ON t1.a = t2.a WHERE t1a < 17"}}
+            SQLPipelineBuilder{std::string{"SELECT t1.a as t1a, t1.b as t1b FROM table_a AS t1 JOIN table_a AS t2 ON t1.a = t2.a WHERE t1a < 17"}}
                 .create_pipeline();
         const auto [_, table] = pipeline.get_result_table();
-        ASSERT_EQ(17ul, table->row_count());
+        ASSERT_EQ(0, table->get_value<int32_t>(ColumnID{0}, 0));
+        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
       }
     }
   };
