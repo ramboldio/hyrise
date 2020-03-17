@@ -183,21 +183,32 @@ TEST_F(StressTest, Encoding) {
   };
 
   const auto chunk_encoding_specs = {
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::LZ4},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded},
                         SegmentEncodingSpec{EncodingType::FixedStringDictionary}},
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary}, SegmentEncodingSpec{EncodingType::Unencoded}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::LZ4}},
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded}, SegmentEncodingSpec{EncodingType::Dictionary}},
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::RunLength}, SegmentEncodingSpec{EncodingType::LZ4}},
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference},
-                        SegmentEncodingSpec{EncodingType::RunLength}}};
+                        SegmentEncodingSpec{EncodingType::RunLength}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::LZ4}}};
 
   auto encoding_runner = [&]() {
+    const auto column_count = table_a->column_count();
     while (!stop) {
-      for (const auto& encoding : chunk_encoding_specs) {
-        // std::cout << "+";
-        ChunkEncoder::encode_all_chunks(table_a, encoding);
+      for (const auto& chunk_encoding_spec : chunk_encoding_specs) {
         for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
-          assert_chunk_encoding(table_a->get_chunk(chunk_id), encoding);
+          const auto& chunk = table_a->get_chunk(chunk_id);
+          for (auto column_id = ColumnID{0}; column_id < column_count; ++column_id) {
+            const auto segment_encoding_spec = chunk_encoding_spec[column_id];
+            const auto& inital_segment = chunk->get_segment(column_id);
+            const auto data_type = column_definitions[column_id].data_type;
+            const auto encoded_segment = ChunkEncoder::encode_segment(inital_segment, data_type, segment_encoding_spec);
+            chunk->replace_segment(column_id, encoded_segment);
+          }
+          assert_chunk_encoding(chunk, chunk_encoding_spec);
         }
       }
     }
