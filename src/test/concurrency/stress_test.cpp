@@ -203,7 +203,9 @@ TEST_F(StressTest, Encoding) {
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference},
                         SegmentEncodingSpec{EncodingType::RunLength}},
       ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
-                        SegmentEncodingSpec{EncodingType::LZ4}}};
+                        SegmentEncodingSpec{EncodingType::LZ4}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128}}};
 
   auto encoding_runner = [&]() {
     const auto column_count = table_a->column_count();
