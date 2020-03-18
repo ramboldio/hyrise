@@ -156,4 +156,89 @@ TEST_F(StressTest, TestTransactionInserts) {
   EXPECT_EQ(conflicted_increments, 0);
 }
 
+TEST_F(StressTest, Encoding) {
+  TableColumnDefinitions column_definitions;
+  column_definitions.emplace_back("a", DataType::Int, false);
+  column_definitions.emplace_back("b", DataType::String, false);
+
+  auto table_a = std::make_shared<Table>(column_definitions, TableType::Data, std::nullopt, UseMvcc::Yes);
+  for (auto row_id = int32_t{0}; row_id < 2'000'017; ++row_id) {
+    table_a->append({row_id, pmr_string{std::to_string(row_id)}});
+  }
+  const auto chunk_count = table_a->chunk_count();
+  table_a->get_chunk(ChunkID{chunk_count - 1})->finalize();
+  Hyrise::get().storage_manager.add_table("table_a", table_a);
+
+  auto stop = false;
+
+  auto query_runner = [&]() {
+    while (!stop) {
+      {
+        auto pipeline =
+            SQLPipelineBuilder{std::string{"SELECT SUM(a), MIN(b) FROM table_a WHERE a < 17"}}
+                .create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        ASSERT_EQ(136, table->get_value<int64_t>(ColumnID{0}, 0));
+        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
+      }
+      {
+        auto pipeline =
+            SQLPipelineBuilder{std::string{"SELECT t1.a as t1a, t1.b as t1b FROM table_a AS t1 JOIN table_a AS t2 ON t1.a = t2.a WHERE t1a < 17"}}
+                .create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        ASSERT_EQ(0, table->get_value<int32_t>(ColumnID{0}, 0));
+        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
+      }
+    }
+  };
+
+  const auto chunk_encoding_specs = {
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded},
+                        SegmentEncodingSpec{EncodingType::FixedStringDictionary}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary}, SegmentEncodingSpec{EncodingType::Unencoded}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::LZ4}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded}, SegmentEncodingSpec{EncodingType::Dictionary}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::RunLength}, SegmentEncodingSpec{EncodingType::LZ4}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference},
+                        SegmentEncodingSpec{EncodingType::RunLength}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::LZ4}},
+      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
+                        SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128}}};
+
+  auto encoding_runner = [&]() {
+    const auto column_count = table_a->column_count();
+    while (!stop) {
+      for (const auto& chunk_encoding_spec : chunk_encoding_specs) {
+        for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
+          const auto& chunk = table_a->get_chunk(chunk_id);
+          for (auto column_id = ColumnID{0}; column_id < column_count; ++column_id) {
+            const auto segment_encoding_spec = chunk_encoding_spec[column_id];
+            const auto& inital_segment = chunk->get_segment(column_id);
+            const auto data_type = column_definitions[column_id].data_type;
+            const auto encoded_segment = ChunkEncoder::encode_segment(inital_segment, data_type, segment_encoding_spec);
+            chunk->replace_segment(column_id, encoded_segment);
+          }
+          assert_chunk_encoding(chunk, chunk_encoding_spec);
+        }
+      }
+    }
+  };
+
+  std::thread query_thread_1([&] { query_runner(); });
+  std::thread query_thread_2([&] { query_runner(); });
+  std::thread query_thread_3([&] { query_runner(); });
+  std::thread query_thread_4([&] { query_runner(); });
+  std::thread encoding_thread([&] { encoding_runner(); });
+
+  std::this_thread::sleep_for(std::chrono::seconds(600));
+  stop = true;
+  query_thread_1.join();
+  query_thread_2.join();
+  query_thread_3.join();
+  query_thread_4.join();
+  encoding_thread.join();
+}
+
 }  // namespace opossum
