@@ -239,9 +239,6 @@ TEST_F(StressTest, Encoding) {
   query_thread_3.join();
   query_thread_4.join();
   encoding_thread.join();
-
-  // One last check
-  query_runner();
 }
 
 }  // namespace opossum
