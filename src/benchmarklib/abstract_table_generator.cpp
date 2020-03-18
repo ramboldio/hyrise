@@ -32,6 +32,10 @@ void AbstractTableGenerator::generate_and_store() {
   Timer timer;
 
   std::cout << "- Loading/Generating tables " << std::endl;
+  if (Hyrise::get().storage_manager.has_table("lineitem")) {
+    std::cout << "early exit" << std::endl;
+    return;
+  }
   auto table_info_by_name = generate();
   metrics.generation_duration = timer.lap();
   std::cout << "- Loading/Generating tables done (" << format_duration(metrics.generation_duration) << ")" << std::endl;

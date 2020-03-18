@@ -6,6 +6,16 @@
 #include "hyrise.hpp"
 #include "scheduler/node_queue_scheduler.hpp"
 
+#include "benchmark_config.hpp"
+#include "benchmark_runner.hpp"
+#include "file_based_benchmark_item_runner.hpp"
+#include "file_based_table_generator.hpp"
+#include "sql/sql_pipeline_builder.hpp"
+#include "tpch/tpch_benchmark_item_runner.hpp"
+#include "tpch/tpch_table_generator.hpp"
+#define MACOS OS
+#include "tpcds/tpcds_table_generator.hpp"
+
 namespace opossum {
 
 class StressTest : public BaseTest {
@@ -157,87 +167,92 @@ TEST_F(StressTest, TestTransactionInserts) {
 }
 
 TEST_F(StressTest, Encoding) {
-  TableColumnDefinitions column_definitions;
-  column_definitions.emplace_back("a", DataType::Int, false);
-  column_definitions.emplace_back("b", DataType::String, false);
+  //
+  // FIRST RUN
+  //
+  auto config = std::make_shared<BenchmarkConfig>(BenchmarkConfig::get_default_config());
+  config->enable_visualization = false;
+  config->chunk_size = 100'000;
+  config->cache_binary_tables = true;
+  config->max_duration = std::chrono::seconds(300);
+  config->warmup_duration = std::chrono::seconds(20);
 
-  auto table_a = std::make_shared<Table>(column_definitions, TableType::Data, std::nullopt, UseMvcc::Yes);
-  for (auto row_id = int32_t{0}; row_id < 2'000'017; ++row_id) {
-    table_a->append({row_id, pmr_string{std::to_string(row_id)}});
-  }
-  const auto chunk_count = table_a->chunk_count();
-  table_a->get_chunk(ChunkID{chunk_count - 1})->finalize();
-  Hyrise::get().storage_manager.add_table("table_a", table_a);
+  constexpr auto USE_PREPARED_STATEMENTS = false;
+  auto SCALE_FACTOR = 0.01f;
+  config->max_runs = 1;
+  config->warmup_duration = std::chrono::seconds(0);
+  auto item_runner = std::make_unique<TPCHBenchmarkItemRunner>(config, USE_PREPARED_STATEMENTS, SCALE_FACTOR);
+  auto benchmark_runner = std::make_shared<BenchmarkRunner>(
+      *config, std::move(item_runner), std::make_unique<TPCHTableGenerator>(SCALE_FACTOR, config), BenchmarkRunner::create_context(*config));
+  Hyrise::get().benchmark_runner = benchmark_runner;
+  benchmark_runner->run();
+  //
+  //
+  //
+
+  config->max_runs = 30;
+  // config->benchmark_mode = BenchmarkMode::Shuffled;
+  item_runner = std::make_unique<TPCHBenchmarkItemRunner>(config, USE_PREPARED_STATEMENTS, SCALE_FACTOR);
+  benchmark_runner = std::make_shared<BenchmarkRunner>(
+      *config, std::move(item_runner), std::make_unique<TPCHTableGenerator>(SCALE_FACTOR, config), BenchmarkRunner::create_context(*config));
+  Hyrise::get().benchmark_runner = benchmark_runner;
 
   auto stop = false;
 
   auto query_runner = [&]() {
     while (!stop) {
-      {
-        auto pipeline =
-            SQLPipelineBuilder{std::string{"SELECT SUM(a), MIN(b) FROM table_a WHERE a < 17"}}
-                .create_pipeline();
-        const auto [_, table] = pipeline.get_result_table();
-        ASSERT_EQ(136, table->get_value<int64_t>(ColumnID{0}, 0));
-        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
-      }
-      {
-        auto pipeline =
-            SQLPipelineBuilder{std::string{"SELECT t1.a as t1a, t1.b as t1b FROM table_a AS t1 JOIN table_a AS t2 ON t1.a = t2.a WHERE t1a < 17"}}
-                .create_pipeline();
-        const auto [_, table] = pipeline.get_result_table();
-        ASSERT_EQ(0, table->get_value<int32_t>(ColumnID{0}, 0));
-        ASSERT_EQ(pmr_string{"0"}, table->get_value<pmr_string>(ColumnID{1}, 0));
-      }
+      benchmark_runner->run();
     }
   };
-
-  const auto chunk_encoding_specs = {
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded},
-                        SegmentEncodingSpec{EncodingType::FixedStringDictionary}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary}, SegmentEncodingSpec{EncodingType::Unencoded}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128},
-                        SegmentEncodingSpec{EncodingType::LZ4}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::Unencoded}, SegmentEncodingSpec{EncodingType::Dictionary}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::RunLength}, SegmentEncodingSpec{EncodingType::LZ4}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference},
-                        SegmentEncodingSpec{EncodingType::RunLength}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
-                        SegmentEncodingSpec{EncodingType::LZ4}},
-      ChunkEncodingSpec{SegmentEncodingSpec{EncodingType::FrameOfReference, VectorCompressionType::SimdBp128},
-                        SegmentEncodingSpec{EncodingType::Dictionary, VectorCompressionType::SimdBp128}}};
 
   auto encoding_runner = [&]() {
-    const auto column_count = table_a->column_count();
     while (!stop) {
-      for (const auto& chunk_encoding_spec : chunk_encoding_specs) {
-        for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
-          const auto& chunk = table_a->get_chunk(chunk_id);
-          for (auto column_id = ColumnID{0}; column_id < column_count; ++column_id) {
-            const auto segment_encoding_spec = chunk_encoding_spec[column_id];
-            const auto& inital_segment = chunk->get_segment(column_id);
-            const auto data_type = column_definitions[column_id].data_type;
-            const auto encoded_segment = ChunkEncoder::encode_segment(inital_segment, data_type, segment_encoding_spec);
-            chunk->replace_segment(column_id, encoded_segment);
-          }
-          assert_chunk_encoding(chunk, chunk_encoding_spec);
-        }
+      {
+        const std::string sql = "select sum(estimated_size_in_bytes) from meta_segments;";
+        auto pipeline = SQLPipelineBuilder{sql}.create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        std::cout << "%%%%%%%%%%%%%%%%%%%%%" << table->get_value<int64_t>(ColumnID{0}, 0) << " bytes" << std::endl;
       }
+      {
+        const std::string sql = "update meta_settings set value='100' where name='CompressionPlugin_MemoryBudget';";
+        auto pipeline = SQLPipelineBuilder{sql}.create_pipeline();
+        const auto [status, _] = pipeline.get_result_table();
+        EXPECT_EQ(status, SQLPipelineStatus::Success);
+      }
+
+      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 300)));
+
+      {
+        const std::string sql = "select sum(estimated_size_in_bytes) from meta_segments;";
+        auto pipeline = SQLPipelineBuilder{sql}.create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        std::cout << "%%%%%%%%%%%%%%%%%%%%%" << table->get_value<int64_t>(ColumnID{0}, 0) << " bytes" << std::endl;
+      }
+      {
+        const std::string sql = "update meta_settings set value='100000000000' where name='CompressionPlugin_MemoryBudget';";
+        auto pipeline = SQLPipelineBuilder{sql}.create_pipeline();
+        const auto [status, _] = pipeline.get_result_table();
+        EXPECT_EQ(status, SQLPipelineStatus::Success);
+      }
+
+      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 300)));
     }
   };
 
+  Hyrise::get().plugin_manager.load_plugin("lib/libCompressionPlugin.dylib");
+
   std::thread query_thread_1([&] { query_runner(); });
-  std::thread query_thread_2([&] { query_runner(); });
-  std::thread query_thread_3([&] { query_runner(); });
-  std::thread query_thread_4([&] { query_runner(); });
+  // std::thread query_thread_2([&] { query_runner(); });
+  // std::thread query_thread_3([&] { query_runner(); });
+  // std::thread query_thread_4([&] { query_runner(); });
   std::thread encoding_thread([&] { encoding_runner(); });
 
-  std::this_thread::sleep_for(std::chrono::seconds(600));
+  std::this_thread::sleep_for(std::chrono::seconds(36000));
   stop = true;
   query_thread_1.join();
-  query_thread_2.join();
-  query_thread_3.join();
-  query_thread_4.join();
+  // query_thread_2.join();
+  // query_thread_3.join();
+  // query_thread_4.join();
   encoding_thread.join();
 }
 
