@@ -78,4 +78,11 @@ for probe in $(grep -r --include=*.[ch]pp --exclude=probes.hpp --exclude=provide
     fi
 done
 
+# Tests should not include any type of random behavior, see #1321.
+output=$(grep -rEn '#include <random>|std::random|std::[a-z_]+_engine|std::[a-z_]+_distribution' src/test | grep -v std::random_access_iterator_tag | sed 's/^\([a-zA-Z/._]*:[0-9]*\).*/\1  Tests should not include any type of random behavior, see #1321./')
+if [ ! -z "$output" ]; then
+	echo "$output"
+	exitcode=1
+fi
+
 exit $exitcode
