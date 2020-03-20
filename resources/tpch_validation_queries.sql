@@ -493,9 +493,9 @@ SELECT 100.00 * SUM(case when p_type like 'PROMO%' then l_extendedprice*(1.0-l_d
 --  3. implicit type conversions for arithmetic operations are not supported
 --    a. changed 1 to 1.0 explicitly
 --  4. Removed "drop view revenue[STREAM_ID];" because with it SQLiteWrapper doesn't return a result.
-create view revenue (supplier_no, total_revenue) as SELECT l_suppkey, SUM(l_extendedprice * (1.0 - l_discount)) FROM lineitem WHERE l_shipdate >= '1993-05-13' AND l_shipdate < '1993-08-13' GROUP BY l_suppkey;
-SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM supplier, revenue WHERE s_suppkey = supplier_no AND total_revenue = (SELECT max(total_revenue) FROM revenue) ORDER BY s_suppkey;
-drop view revenue;
+create view revenue[STREAM_ID] (supplier_no, total_revenue) as SELECT l_suppkey, SUM(l_extendedprice * (1.0 - l_discount)) FROM lineitem WHERE l_shipdate >= '1993-05-13' AND l_shipdate < '1993-08-13' GROUP BY l_suppkey;
+SELECT s_suppkey, s_name, s_address, s_phone, total_revenue FROM supplier, revenue[STREAM_ID] WHERE s_suppkey = supplier_no AND total_revenue = (SELECT max(total_revenue) FROM revenue[STREAM_ID]) ORDER BY s_suppkey;
+drop view revenue[STREAM_ID];
 
 
 -- TPC-H 16

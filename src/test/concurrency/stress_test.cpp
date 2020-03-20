@@ -1,9 +1,12 @@
+#include <fstream>
 #include <future>
+#include <sstream>
 #include <thread>
 
 #include "base_test.hpp"
 
 #include "hyrise.hpp"
+#include "optimizer/optimizer.hpp"
 #include "scheduler/node_queue_scheduler.hpp"
 
 #include "benchmark_config.hpp"
@@ -172,10 +175,11 @@ TEST_F(StressTest, Encoding) {
   //
   auto config = std::make_shared<BenchmarkConfig>(BenchmarkConfig::get_default_config());
   config->enable_visualization = false;
-  config->chunk_size = 100'000;
+  config->chunk_size = 65'535;
   config->cache_binary_tables = true;
   config->max_duration = std::chrono::seconds(300);
   config->warmup_duration = std::chrono::seconds(20);
+  config->enable_scheduler = true;
 
   constexpr auto USE_PREPARED_STATEMENTS = false;
   auto SCALE_FACTOR = 0.01f;
@@ -186,9 +190,6 @@ TEST_F(StressTest, Encoding) {
       *config, std::move(item_runner), std::make_unique<TPCHTableGenerator>(SCALE_FACTOR, config), BenchmarkRunner::create_context(*config));
   Hyrise::get().benchmark_runner = benchmark_runner;
   benchmark_runner->run();
-  //
-  //
-  //
 
   config->max_runs = 30;
   // config->benchmark_mode = BenchmarkMode::Shuffled;
@@ -196,12 +197,51 @@ TEST_F(StressTest, Encoding) {
   benchmark_runner = std::make_shared<BenchmarkRunner>(
       *config, std::move(item_runner), std::make_unique<TPCHTableGenerator>(SCALE_FACTOR, config), BenchmarkRunner::create_context(*config));
   Hyrise::get().benchmark_runner = benchmark_runner;
+  //
+  //  /TPCH
+  //
+
+  //
+  //  File based TPCH
+  //
+  std::ifstream query_file("resources/tpch_validation_queries.sql");
+  std::string line{};
+  std::vector<std::string> tpch_queries;
+  while (std::getline(query_file, line)) {
+    line.erase(std::remove(line.begin(), line.end(), '\n'), line.end());
+    if (line == "" || line[0] == '-') continue;
+    tpch_queries.emplace_back(line);
+  }
+
+  //
+  //  /File based TPCH
+  //
 
   auto stop = false;
+  const auto optimizer = Optimizer::create_default_optimizer();
 
-  auto query_runner = [&]() {
+  auto tpch_runner = [&]() {
     while (!stop) {
       benchmark_runner->run();
+    }
+  };
+
+  auto query_runner = [&](const size_t thread_id, std::vector<std::string> queries) {
+    while (!stop) {
+      for (auto& query : queries) {
+        // auto context = Hyrise::get().transaction_manager.new_transaction_context();
+        while (query.find("[STREAM_ID]") != std::string::npos) {
+          // std::cout << " I am " << thread_id << std::endl;
+          query.replace(query.find("[STREAM_ID]"), sizeof("[STREAM_ID]") - 1, std::string{"__"} + std::to_string(thread_id));
+        }
+        // std::cout << "##### " << thread_id << std::endl << "\t\t" << query << std::endl;
+        auto pipeline = SQLPipelineBuilder{query}.with_optimizer(optimizer).with_mvcc(UseMvcc::Yes).create_pipeline();
+        const auto [_, table] = pipeline.get_result_table();
+        EXPECT_GE(table->row_count(), 0);  // GE because of create view, which does not yield columns
+        // SQLPipelineBuilder{query}.with_optimizer(optimizer).with_mvcc(UseMvcc::Yes).create_pipeline();
+        // const auto [_, table] = pipeline.get_result_table();
+        // EXPECT_GE(table->row_count(), 0);  // GE because of create view, which does not yield columns
+      }
     }
   };
 
@@ -241,18 +281,22 @@ TEST_F(StressTest, Encoding) {
 
   Hyrise::get().plugin_manager.load_plugin("lib/libCompressionPlugin.dylib");
 
-  std::thread query_thread_1([&] { query_runner(); });
-  // std::thread query_thread_2([&] { query_runner(); });
-  // std::thread query_thread_3([&] { query_runner(); });
-  // std::thread query_thread_4([&] { query_runner(); });
+  constexpr auto QUERY_COUNT = size_t{8};
+
+  std::thread query_thread_1([&] { tpch_runner(); });
+  std::vector<std::thread> query_threads;
+  query_threads.reserve(QUERY_COUNT);
+  for (auto thread_id = size_t{0}; thread_id < QUERY_COUNT; ++thread_id) {
+    query_threads.emplace_back([&] { query_runner(thread_id, tpch_queries); });
+  }
   std::thread encoding_thread([&] { encoding_runner(); });
 
   std::this_thread::sleep_for(std::chrono::seconds(36000));
   stop = true;
   query_thread_1.join();
-  // query_thread_2.join();
-  // query_thread_3.join();
-  // query_thread_4.join();
+  for (auto& thread : query_threads) {
+    thread.join();
+  }
   encoding_thread.join();
 }
 
