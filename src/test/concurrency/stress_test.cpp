@@ -220,11 +220,11 @@ TEST_F(StressTest, Encoding) {
   auto stop = false;
   const auto optimizer = Optimizer::create_default_optimizer();
 
-  auto tpch_runner = [&]() {
-    while (!stop) {
-      benchmark_runner->run();
-    }
-  };
+  // auto tpch_runner = [&]() {
+  //   while (!stop) {
+  //     benchmark_runner->run();
+  //   }
+  // };
 
   auto query_runner = [&](const size_t thread_id, std::vector<std::string> queries) {
     while (!stop) {
@@ -236,8 +236,8 @@ TEST_F(StressTest, Encoding) {
         }
         // std::cout << "##### " << thread_id << std::endl << "\t\t" << query << std::endl;
         auto pipeline = SQLPipelineBuilder{query}.with_optimizer(optimizer).with_mvcc(UseMvcc::Yes).create_pipeline();
-        const auto [_, table] = pipeline.get_result_table();
-        EXPECT_GE(table->row_count(), 0);  // GE because of create view, which does not yield columns
+        const auto [status, _] = pipeline.get_result_table();
+        EXPECT_EQ(status, SQLPipelineStatus::Success);
         // SQLPipelineBuilder{query}.with_optimizer(optimizer).with_mvcc(UseMvcc::Yes).create_pipeline();
         // const auto [_, table] = pipeline.get_result_table();
         // EXPECT_GE(table->row_count(), 0);  // GE because of create view, which does not yield columns
@@ -283,7 +283,7 @@ TEST_F(StressTest, Encoding) {
 
   constexpr auto QUERY_COUNT = size_t{8};
 
-  std::thread query_thread_1([&] { tpch_runner(); });
+  // std::thread query_thread_1([&] { tpch_runner(); });
   std::vector<std::thread> query_threads;
   query_threads.reserve(QUERY_COUNT);
   for (auto thread_id = size_t{0}; thread_id < QUERY_COUNT; ++thread_id) {
@@ -293,7 +293,7 @@ TEST_F(StressTest, Encoding) {
 
   std::this_thread::sleep_for(std::chrono::seconds(36000));
   stop = true;
-  query_thread_1.join();
+  // query_thread_1.join();
   for (auto& thread : query_threads) {
     thread.join();
   }

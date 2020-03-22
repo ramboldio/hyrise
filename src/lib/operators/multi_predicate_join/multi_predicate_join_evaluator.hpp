@@ -61,9 +61,10 @@ class MultiPredicateJoinEvaluator {
   };
 
   std::vector<std::unique_ptr<BaseFieldComparator>> _comparators;
+  std::vector<std::shared_ptr<BaseSegment>> _stash;
 
   template <typename T>
-  static std::vector<std::unique_ptr<AbstractSegmentAccessor<T>>> _create_accessors(const Table& table,
+  std::vector<std::unique_ptr<AbstractSegmentAccessor<T>>> _create_accessors(const Table& table,
                                                                                     const ColumnID column_id);
 };
 

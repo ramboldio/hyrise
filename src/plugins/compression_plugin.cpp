@@ -87,6 +87,7 @@ int64_t CompressionPlugin::_compress_column(const std::string table_name, const 
 
   auto encoded_segment_count = size_t{0};
   for (auto chunk_id = ChunkID{0}; chunk_id < chunk_count; ++chunk_id) {
+    std::cout << table_name << "." << column_name << "@" << chunk_id << "(" << encoding_name << ")" << std::endl;
     if ((desired_memory_usage_reduction > 0 && achieved_memory_usage_reduction >= desired_memory_usage_reduction) ||
        (desired_memory_usage_reduction < 0 && achieved_memory_usage_reduction < desired_memory_usage_reduction))  {
       // Finish as soon as we have achieved the desired reduction in memory usage OR break if we have used up the
@@ -111,6 +112,7 @@ int64_t CompressionPlugin::_compress_column(const std::string table_name, const 
     memory_usage_new += new_segment_size;
 
     chunk->replace_segment(column_id, encoded_segment);
+    _keep_alive_stash.emplace_back(base_segment);
     achieved_memory_usage_reduction += previous_segment_size - new_segment_size;
     ++encoded_segment_count;
     std::this_thread::sleep_for(std::chrono::milliseconds(SLEEP_BETWEEN_SEGMENTS_MS));
@@ -136,6 +138,7 @@ int64_t CompressionPlugin::_compress_column(const std::string table_name, const 
 }
 
 void CompressionPlugin::_optimize_compression() {
+  _keep_alive_stash.clear();
   std::cout << "##################################################### running" << std::endl;
   const auto current_system_memory_usage = get_whole_system_memory_usage();
   const auto system_memory_usage_budget = std::stoll(_memory_budget_setting->get());

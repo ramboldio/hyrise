@@ -64,6 +64,7 @@ std::vector<std::unique_ptr<AbstractSegmentAccessor<T>>> MultiPredicateJoinEvalu
     Assert(chunk, "Physically deleted chunk should not reach this point, see get_chunk / #1686.");
 
     const auto& segment = chunk->get_segment(column_id);
+    _stash.emplace_back(segment);
     accessors[chunk_id] = create_segment_accessor<T>(segment);
   }
 
