@@ -824,7 +824,6 @@ void AggregateHash::_write_groupby_output(PosList& pos_list) {
       auto values = pmr_vector<ColumnDataType>(pos_list.size());
       auto null_values = pmr_vector<bool>(pos_list.size());
       std::vector<std::unique_ptr<AbstractSegmentAccessor<ColumnDataType>>> accessors(input_table->chunk_count());
-      std::vector<std::shared_ptr<BaseSegment>> stash;
 
       auto output_offset = ChunkOffset{0};
 
@@ -835,7 +834,6 @@ void AggregateHash::_write_groupby_output(PosList& pos_list) {
 
         auto& accessor = accessors[row_id.chunk_id];
         if (!accessor) {
-          stash.emplace_back(input_table->get_chunk(row_id.chunk_id)->get_segment(column_id));
           accessor =
               create_segment_accessor<ColumnDataType>(input_table->get_chunk(row_id.chunk_id)->get_segment(column_id));
         }
