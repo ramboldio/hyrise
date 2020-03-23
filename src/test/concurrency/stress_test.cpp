@@ -260,7 +260,7 @@ TEST_F(StressTest, Encoding) {
         EXPECT_EQ(status, SQLPipelineStatus::Success);
       }
 
-      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 300)));
+      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 1200)));
 
       {
         const std::string sql = "select sum(estimated_size_in_bytes) from meta_segments;";
@@ -275,7 +275,7 @@ TEST_F(StressTest, Encoding) {
         EXPECT_EQ(status, SQLPipelineStatus::Success);
       }
 
-      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 300)));
+      std::this_thread::sleep_for(std::chrono::seconds(static_cast<long long>(SCALE_FACTOR * 1200)));
     }
   };
 
