@@ -34,7 +34,7 @@ static std::shared_ptr<Table> generate_custom_table(const size_t row_count,
 
 static void BM_Sort(benchmark::State& state, const size_t row_count = 40'000,
                     const DataType data_type = DataType::Int, const float null_ratio = 0.0f,
-                    const bool multi_column_sort = true, const bool use_reference_segment = false) {
+                    const bool multi_column_sort = false, const bool use_reference_segment = false) {
   micro_benchmark_clear_cache();
 
   const auto input_table = generate_custom_table(row_count, data_type, null_ratio);
@@ -45,7 +45,6 @@ static void BM_Sort(benchmark::State& state, const size_t row_count = 40'000,
         std::make_shared<Limit>(input_operator, expression_functional::to_expression(std::numeric_limits<int64_t>::max()));
     input_operator->execute();
   }
-
 
   auto sort_definitions = std::vector<SortColumnDefinition>{};
   if (multi_column_sort) {
@@ -61,12 +60,12 @@ static void BM_Sort(benchmark::State& state, const size_t row_count = 40'000,
   }
 }
 
-static void BM_SortWithVaryingRowCount(benchmark::State& state) {
+static void BM_Sort(benchmark::State& state) {
   const size_t row_count = state.range(0);
   BM_Sort(state, row_count);
 }
 
-static void BM_SortWithVaryingRowCountTwoColumns(benchmark::State& state) {
+static void BM_SortTwoColumns(benchmark::State& state) {
   const size_t row_count = state.range(0);
   BM_Sort(state, row_count, DataType::Int, 0.0f, true);
 }
@@ -76,26 +75,26 @@ static void BM_SortWithNullValues(benchmark::State& state) {
   BM_Sort(state, row_count, DataType::Int, 0.2f);
 }
 
-static void BM_SortWithReferenceSegments(benchmark::State& state) {
+static void BM_SortReferenceSegments(benchmark::State& state) {
   const size_t row_count = state.range(0);
   BM_Sort(state, row_count, DataType::Int, 0.0f, false, true);
 }
 
-static void BM_SortWithReferenceSegmentsTwoColumns(benchmark::State& state) {
+static void BM_SortReferenceSegmentsTwoColumns(benchmark::State& state) {
   const size_t row_count = state.range(0);
   BM_Sort(state, row_count, DataType::Int, 0.0f, true, true);
 }
 
-static void BM_SortWithStrings(benchmark::State& state) {
+static void BM_SortStrings(benchmark::State& state) {
   const size_t row_count = state.range(0);
   BM_Sort(state, row_count, DataType::String);
 }
 
-BENCHMARK(BM_SortWithVaryingRowCount)->RangeMultiplier(7)->Range(10, 1'000'000);
-BENCHMARK(BM_SortWithVaryingRowCountTwoColumns)->RangeMultiplier(7)->Range(10, 1'000'000);
-BENCHMARK(BM_SortWithNullValues)->RangeMultiplier(7)->Range(10, 1'000'000);
-BENCHMARK(BM_SortWithReferenceSegments)->RangeMultiplier(7)->Range(10, 1'000'000);
-BENCHMARK(BM_SortWithReferenceSegmentsTwoColumns)->RangeMultiplier(7)->Range(10, 1'000'000);
-BENCHMARK(BM_SortWithStrings)->RangeMultiplier(7)->Range(10, 1'000'000);
+BENCHMARK(BM_Sort)->RangeMultiplier(100)->Range(100, 1'000'000);
+BENCHMARK(BM_SortTwoColumns)->RangeMultiplier(100)->Range(100, 1'000'000);
+BENCHMARK(BM_SortWithNullValues)->RangeMultiplier(100)->Range(100, 1'000'000);
+BENCHMARK(BM_SortReferenceSegments)->RangeMultiplier(100)->Range(100, 1'000'000);
+BENCHMARK(BM_SortReferenceSegmentsTwoColumns)->RangeMultiplier(100)->Range(100, 1'000'000);
+BENCHMARK(BM_SortStrings)->RangeMultiplier(100)->Range(100, 1'000'000);
 
 }  // namespace opossum
