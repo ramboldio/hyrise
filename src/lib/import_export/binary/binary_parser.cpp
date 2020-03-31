@@ -195,9 +195,15 @@ template <typename T>
 std::shared_ptr<RunLengthSegment<T>> BinaryParser::_import_run_length_segment(std::ifstream& file,
                                                                               ChunkOffset row_count) {
   const auto size = _read_value<uint32_t>(file);
-  const auto values = std::make_shared<pmr_vector<T>>(_read_values<T>(file, size));
-  const auto null_values = std::make_shared<pmr_vector<bool>>(_read_values<bool>(file, size));
-  const auto end_positions = std::make_shared<pmr_vector<ChunkOffset>>(_read_values<ChunkOffset>(file, size));
+  const auto values = pmr_vector<T>(_read_values<T>(file, size));
+
+  const auto null_values_size = _read_value<uint32_t>(file);
+  std::optional<pmr_vector<bool>> null_values;
+  if (null_values_size != 0) {
+    null_values = pmr_vector<bool>(_read_values<bool>(file, null_values_size));
+  }
+
+  const auto end_positions = pmr_vector<ChunkOffset>(_read_values<ChunkOffset>(file, size));
 
   return std::make_shared<RunLengthSegment<T>>(values, null_values, end_positions);
 }
@@ -243,8 +249,6 @@ std::shared_ptr<LZ4Segment<T>> BinaryParser::_import_lz4_segment(std::ifstream& 
   std::optional<pmr_vector<bool>> null_values;
   if (null_values_size != 0) {
     null_values = pmr_vector<bool>(_read_values<bool>(file, null_values_size));
-  } else {
-    null_values = std::nullopt;
   }
 
   const auto dictionary_size = _read_value<uint32_t>(file);

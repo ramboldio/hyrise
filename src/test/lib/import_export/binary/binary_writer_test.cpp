@@ -263,6 +263,10 @@ TEST_P(BinaryWriterMultiEncodingTest, RepeatedInt) {
   EXPECT_TRUE(file_exists(filename));
   EXPECT_TRUE(compare_files(
       reference_filepath + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".bin", filename));
+
+  // The following command can be used to recreate binary test files.
+  // BinaryWriter::write(
+    //     *table, reference_filepath + ::testing::UnitTest::GetInstance()->current_test_info()->name() + ".bin");
 }
 
 TEST_P(BinaryWriterMultiEncodingTest, SingleChunkSingleFloatColumn) {

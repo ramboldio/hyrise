@@ -42,13 +42,13 @@ class BaseCompressedVector;
 template <typename T>
 class RunLengthSegment : public BaseEncodedSegment {
  public:
-  explicit RunLengthSegment(const std::shared_ptr<const pmr_vector<T>>& values,
-                            const std::shared_ptr<const pmr_vector<bool>>& null_values,
-                            const std::shared_ptr<const pmr_vector<ChunkOffset>>& end_positions);
+  explicit RunLengthSegment(pmr_vector<T> values,
+                            std::optional<const pmr_vector<bool>> null_values,
+                            pmr_vector<ChunkOffset> end_positions);
 
-  std::shared_ptr<const pmr_vector<T>> values() const;
-  std::shared_ptr<const pmr_vector<bool>> null_values() const;
-  std::shared_ptr<const pmr_vector<ChunkOffset>> end_positions() const;
+  const pmr_vector<T>& values() const;
+  const std::optional<const pmr_vector<bool>>& null_values() const;
+  const pmr_vector<ChunkOffset>& end_positions() const;
 
   /**
    * @defgroup BaseSegment interface
@@ -59,15 +59,14 @@ class RunLengthSegment : public BaseEncodedSegment {
 
   std::optional<T> get_typed_value(const ChunkOffset chunk_offset) const {
     // performance critical - not in cpp to help with inlining
-    const auto end_position_it = std::lower_bound(_end_positions->cbegin(), _end_positions->cend(), chunk_offset);
-    const auto index = std::distance(_end_positions->cbegin(), end_position_it);
+    const auto end_position_it = std::lower_bound(_end_positions.cbegin(), _end_positions.cend(), chunk_offset);
+    const auto index = std::distance(_end_positions.cbegin(), end_position_it);
 
-    const auto is_null = (*_null_values)[index];
-    if (is_null) {
+    if (_null_values ? (*_null_values)[index] : false) {
       return std::nullopt;
     }
 
-    return (*_values)[index];
+    return _values[index];
   }
 
   ChunkOffset size() const final;
@@ -89,9 +88,9 @@ class RunLengthSegment : public BaseEncodedSegment {
   /**@}*/
 
  protected:
-  const std::shared_ptr<const pmr_vector<T>> _values;
-  const std::shared_ptr<const pmr_vector<bool>> _null_values;
-  const std::shared_ptr<const pmr_vector<ChunkOffset>> _end_positions;
+  const pmr_vector<T> _values;
+  const std::optional<const pmr_vector<bool>> _null_values;
+  const pmr_vector<ChunkOffset> _end_positions;
 };
 
 }  // namespace opossum

@@ -10,26 +10,26 @@
 namespace opossum {
 
 template <typename T>
-RunLengthSegment<T>::RunLengthSegment(const std::shared_ptr<const pmr_vector<T>>& values,
-                                      const std::shared_ptr<const pmr_vector<bool>>& null_values,
-                                      const std::shared_ptr<const pmr_vector<ChunkOffset>>& end_positions)
+RunLengthSegment<T>::RunLengthSegment(pmr_vector<T> values,
+                                      std::optional<const pmr_vector<bool>> null_values,
+                                      pmr_vector<ChunkOffset> end_positions)
     : BaseEncodedSegment(data_type_from_type<T>()),
-      _values{values},
-      _null_values{null_values},
-      _end_positions{end_positions} {}
+      _values{std::move(values)},
+      _null_values{std::move(null_values)},
+      _end_positions{std::move(end_positions)} {}
 
 template <typename T>
-std::shared_ptr<const pmr_vector<T>> RunLengthSegment<T>::values() const {
+const pmr_vector<T>& RunLengthSegment<T>::values() const {
   return _values;
 }
 
 template <typename T>
-std::shared_ptr<const pmr_vector<bool>> RunLengthSegment<T>::null_values() const {
+const std::optional<const pmr_vector<bool>>& RunLengthSegment<T>::null_values() const {
   return _null_values;
 }
 
 template <typename T>
-std::shared_ptr<const pmr_vector<ChunkOffset>> RunLengthSegment<T>::end_positions() const {
+const pmr_vector<ChunkOffset>& RunLengthSegment<T>::end_positions() const {
   return _end_positions;
 }
 
@@ -45,19 +45,20 @@ AllTypeVariant RunLengthSegment<T>::operator[](const ChunkOffset chunk_offset) c
 
 template <typename T>
 ChunkOffset RunLengthSegment<T>::size() const {
-  if (_end_positions->empty()) return 0u;
-  return _end_positions->back() + 1u;
+  if (_end_positions.empty()) return 0u;
+  return _end_positions.back() + 1u;
 }
 
 template <typename T>
 std::shared_ptr<BaseSegment> RunLengthSegment<T>::copy_using_allocator(
-    const PolymorphicAllocator<size_t>& alloc) const {
-  auto new_values = std::make_shared<pmr_vector<T>>(*_values, alloc);
-  auto new_null_values = std::make_shared<pmr_vector<bool>>(*_null_values, alloc);
-  auto new_end_positions = std::make_shared<pmr_vector<ChunkOffset>>(*_end_positions, alloc);
+    const PolymorphicAllocator<size_t>& allocator) const {
+  auto new_values = pmr_vector<T>(_values, allocator);
 
-  auto copy = std::make_shared<RunLengthSegment<T>>(new_values, new_null_values, new_end_positions);
+  auto new_null_values =
+      _null_values ? std::optional<pmr_vector<bool>>{pmr_vector<bool>{*_null_values, allocator}} : std::nullopt;
+  auto new_end_positions = pmr_vector<ChunkOffset>(_end_positions, allocator);
 
+  auto copy = std::make_shared<RunLengthSegment<T>>(std::move(new_values), std::move(new_null_values), std::move(new_end_positions));
   copy->access_counter = access_counter;
 
   return copy;
@@ -65,14 +66,16 @@ std::shared_ptr<BaseSegment> RunLengthSegment<T>::copy_using_allocator(
 
 template <typename T>
 size_t RunLengthSegment<T>::memory_usage([[maybe_unused]] const MemoryUsageCalculationMode mode) const {
-  const auto common_elements_size =
-      sizeof(*this) + _null_values->capacity() / CHAR_BIT +
-      _end_positions->capacity() * sizeof(typename decltype(_end_positions)::element_type::value_type);
+  auto common_elements_size = sizeof(*this) + _end_positions.capacity() * sizeof(ChunkOffset) + sizeof(_null_values);
+
+  if (_null_values) {
+    common_elements_size += _null_values->capacity() / CHAR_BIT;
+  }
 
   if constexpr (std::is_same_v<T, pmr_string>) {  // NOLINT
-    return common_elements_size + string_vector_memory_usage(*_values, mode);
+    return common_elements_size + string_vector_memory_usage(_values, mode);
   }
-  return common_elements_size + _values->capacity() * sizeof(typename decltype(_values)::element_type::value_type);
+  return common_elements_size + _values.capacity() * sizeof(T);
 }
 
 template <typename T>

@@ -19,6 +19,11 @@
 #include "utils/timer.hpp"
 #include "version.hpp"
 
+
+
+
+#include "operators/print.hpp"
+
 namespace opossum {
 
 BenchmarkRunner::BenchmarkRunner(const BenchmarkConfig& config,
@@ -135,6 +140,12 @@ void BenchmarkRunner::run() {
     Hyrise::get().scheduler()->finish();
     Hyrise::get().set_scheduler(std::make_shared<ImmediateExecutionScheduler>());
   }
+
+  const auto column_sizes_query = "SELECT * FROM meta_segments_accurate WHERE encoding_type = 'FrameOfReference' ";
+  std::cout << column_sizes_query  << std::endl;
+  auto column_sizes_pipeline = SQLPipelineBuilder{column_sizes_query}.create_pipeline_statement();
+  const auto [column_sizes_status, column_sizes_table] = column_sizes_pipeline.get_result_table();
+  Print::print(column_sizes_table);
 }
 
 void BenchmarkRunner::_benchmark_shuffled() {

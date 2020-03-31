@@ -418,10 +418,10 @@ TEST_F(EncodedSegmentTest, RunLengthEncodingMonotonicallyIncreasing) {
   const auto run_length_segment = std::dynamic_pointer_cast<const RunLengthSegment<int32_t>>(encoded_segment);
   ASSERT_TRUE(run_length_segment);
 
-  EXPECT_EQ(run_length_segment->values()->size(), row_count);
-  EXPECT_EQ(run_length_segment->end_positions()->size(), row_count);
-  EXPECT_EQ(run_length_segment->end_positions()->front(), 0ul);
-  EXPECT_EQ(run_length_segment->end_positions()->back(), 99ul);
+  EXPECT_EQ(run_length_segment->values().size(), row_count);
+  EXPECT_EQ(run_length_segment->end_positions().size(), row_count);
+  EXPECT_EQ(run_length_segment->end_positions().front(), 0ul);
+  EXPECT_EQ(run_length_segment->end_positions().back(), 99ul);
 }
 
 TEST_F(EncodedSegmentTest, RunLengthEncodingVaryingRuns) {
@@ -460,28 +460,30 @@ TEST_F(EncodedSegmentTest, RunLengthEncodingVaryingRuns) {
   const auto run_length_segment = std::dynamic_pointer_cast<const RunLengthSegment<int32_t>>(encoded_segment);
   ASSERT_TRUE(run_length_segment);
 
-  // values, end_positions, and null_values should have the same length
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->end_positions()->size());
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->null_values()->size());
-  EXPECT_EQ(run_length_segment->values()->size(),
+  // values and end_positionsshould have the same length
+  EXPECT_EQ(run_length_segment->values().size(), run_length_segment->end_positions().size());
+  EXPECT_EQ(run_length_segment->values().size(),
             single_value_runs_decreasing + long_value_runs + single_value_runs_increasing);
 
-  EXPECT_EQ(run_length_segment->end_positions()->front(), 0ul);
-  EXPECT_EQ(run_length_segment->end_positions()->back(), 99ul);
+  EXPECT_EQ(run_length_segment->end_positions().front(), 0ul);
+  EXPECT_EQ(run_length_segment->end_positions().back(), 99ul);
 
   // first longer run has the value 10, starts at position 10, and ends at position 19
-  EXPECT_EQ(run_length_segment->values()->at(10), 0);
-  EXPECT_EQ(run_length_segment->end_positions()->at(9), 9);
-  EXPECT_EQ(run_length_segment->end_positions()->at(10), 19);
-  EXPECT_EQ(run_length_segment->values()->at(11), 1);
+  EXPECT_EQ(run_length_segment->values().at(10), 0);
+  EXPECT_EQ(run_length_segment->end_positions().at(9), 9);
+  EXPECT_EQ(run_length_segment->end_positions().at(10), 19);
+  EXPECT_EQ(run_length_segment->values().at(11), 1);
 
   // Values as expected
-  EXPECT_EQ(run_length_segment->values()->at(0), 10);
-  EXPECT_EQ(run_length_segment->values()->at(1), 9);
-  EXPECT_EQ(run_length_segment->values()->at(9), 1);
-  EXPECT_EQ(run_length_segment->values()->at(17), 7);
-  EXPECT_EQ(run_length_segment->values()->at(18), 90);
-  EXPECT_EQ(run_length_segment->values()->at(27), 99);
+  EXPECT_EQ(run_length_segment->values().at(0), 10);
+  EXPECT_EQ(run_length_segment->values().at(1), 9);
+  EXPECT_EQ(run_length_segment->values().at(9), 1);
+  EXPECT_EQ(run_length_segment->values().at(17), 7);
+  EXPECT_EQ(run_length_segment->values().at(18), 90);
+  EXPECT_EQ(run_length_segment->values().at(27), 99);
+
+  // Optional for NULLs is not set for segments without any NULL values
+  EXPECT_FALSE(run_length_segment->null_values());
 }
 
 // Testing the internal data structures of Run Length-encoded segments for runs and NULL values where NULL values are
@@ -523,23 +525,25 @@ TEST_F(EncodedSegmentTest, RunLengthEncodingNullValues) {
 
   const auto run_length_segment = std::dynamic_pointer_cast<const RunLengthSegment<int32_t>>(encoded_segment);
   ASSERT_TRUE(run_length_segment);
+  ASSERT_TRUE(run_length_segment->null_values());
 
   // The handling of NULL values is unintuitive. When two runs of values are both NULL, they are merged into
   // a single run, only keeping the first value of both runs in values() as a placeholder for the merged NULL run.
   // That means the runs of values 3/4 and the single-value runs of 95/96 are stored as two value runs 3 and 95 in the
   // values() vector (thus, we substract two from the number of expected runs).
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->end_positions()->size());
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->null_values()->size());
-  EXPECT_EQ(run_length_segment->values()->size(), long_runs + short_runs - 2);
-  EXPECT_EQ(run_length_segment->end_positions()->front(), 9ul);
-  EXPECT_EQ(run_length_segment->end_positions()->back(), 99ul);
+  EXPECT_EQ(run_length_segment->values().size(), run_length_segment->end_positions().size());
+  EXPECT_EQ(run_length_segment->values().size(), run_length_segment->null_values()->size());
+  EXPECT_EQ(run_length_segment->values().size(), long_runs + short_runs - 2);
+  EXPECT_EQ(run_length_segment->end_positions().front(), 9ul);
+  EXPECT_EQ(run_length_segment->end_positions().back(), 99ul);
 
   // Values runs for values 4 and 96 have been basically removed.
-  EXPECT_EQ(run_length_segment->values()->at(3), 3);
-  EXPECT_EQ(run_length_segment->values()->at(4), 5);
-  EXPECT_EQ(run_length_segment->values()->at(13), 95);  // 9 + 5 - 1 (succeeding run of 4 removed from values())
-  EXPECT_EQ(run_length_segment->values()->at(14), 97);  // no value 96 in values()
+  EXPECT_EQ(run_length_segment->values().at(3), 3);
+  EXPECT_EQ(run_length_segment->values().at(4), 5);
+  EXPECT_EQ(run_length_segment->values().at(13), 95);  // 9 + 5 - 1 (succeeding run of 4 removed from values())
+  EXPECT_EQ(run_length_segment->values().at(14), 97);  // no value 96 in values()
 
+  EXPECT_TRUE(run_length_segment->null_values());
   // Check that successive NULL runs are merged to single position
   EXPECT_EQ(run_length_segment->null_values()->at(2), false);
   EXPECT_EQ(run_length_segment->null_values()->at(3), true);  // NULLs of values 3/4 are merged into single run
@@ -586,22 +590,22 @@ TEST_F(EncodedSegmentTest, RunLengthEncodingNullValuesInRun) {
 
   // NULL value runs are runs as well. We have four NULL runs and two value runs, where one run is split in two due to
   // a NULL value in between.
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->end_positions()->size());
-  EXPECT_EQ(run_length_segment->values()->size(), run_length_segment->null_values()->size());
-  EXPECT_EQ(run_length_segment->values()->size(), 4 + run_count + 1);
+  EXPECT_EQ(run_length_segment->values().size(), run_length_segment->end_positions().size());
+  EXPECT_EQ(run_length_segment->values().size(), run_length_segment->null_values()->size());
+  EXPECT_EQ(run_length_segment->values().size(), 4 + run_count + 1);
 
-  EXPECT_EQ(run_length_segment->end_positions()->front(), 0);  // value run longer, but first position is NULL
-  EXPECT_EQ(run_length_segment->end_positions()->at(1), 6);
-  EXPECT_EQ(run_length_segment->end_positions()->at(2), 7);
-  EXPECT_EQ(run_length_segment->end_positions()->back(), 19ul);
+  EXPECT_EQ(run_length_segment->end_positions().front(), 0);  // value run longer, but first position is NULL
+  EXPECT_EQ(run_length_segment->end_positions().at(1), 6);
+  EXPECT_EQ(run_length_segment->end_positions().at(2), 7);
+  EXPECT_EQ(run_length_segment->end_positions().back(), 19ul);
 
   // Run is split as NULL value occur, hence values can repeat
-  EXPECT_EQ(run_length_segment->values()->at(1), run_length_segment->values()->at(2));
+  EXPECT_EQ(run_length_segment->values().at(1), run_length_segment->values().at(2));
 
   // NULL value run spans two elements of different value runs (last value of first run, first of second run). Hence,
   // second value run starts at position 11 instead of 10 due to NULL value.
-  EXPECT_EQ(run_length_segment->end_positions()->at(3), 8);
-  EXPECT_EQ(run_length_segment->end_positions()->at(4), 10);
+  EXPECT_EQ(run_length_segment->end_positions().at(3), 8);
+  EXPECT_EQ(run_length_segment->end_positions().at(4), 10);
 }
 
 // Testing the internal data structures of Frame of Reference-encoded segments. In particular, the determination of the

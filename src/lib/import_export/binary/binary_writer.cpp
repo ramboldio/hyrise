@@ -220,14 +220,22 @@ void BinaryWriter::_write_segment(const RunLengthSegment<T>& run_length_segment,
   export_value(ofstream, EncodingType::RunLength);
 
   // Write size and values
-  export_value(ofstream, static_cast<uint32_t>(run_length_segment.values()->size()));
-  export_values(ofstream, *run_length_segment.values());
+  export_value(ofstream, static_cast<uint32_t>(run_length_segment.values().size()));
+  export_values(ofstream, run_length_segment.values());
 
-  // Write NULL values
-  export_values(ofstream, *run_length_segment.null_values());
+  // Write NULL values if segment contains NULLs
+  if (run_length_segment.null_values()) {
+    // Write NULL value size
+    export_value(ofstream, static_cast<uint32_t>(run_length_segment.null_values()->size()));
+    // Write NULL values
+    export_values(ofstream, *run_length_segment.null_values());
+  } else {
+    // No NULL values
+    export_value(ofstream, uint32_t{0});
+  }
 
   // Write end positions
-  export_values(ofstream, *run_length_segment.end_positions());
+  export_values(ofstream, run_length_segment.end_positions());
 }
 
 template <>
